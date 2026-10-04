@@ -1,0 +1,49 @@
+# Builds the Windows installer on GitHub's Windows machines.
+# Push a tag like v0.7.0 and the installer shows up on the repo's Releases
+# page. Building on real Windows avoids cross-compiling the native pieces
+# (koffi's Windows binary, the NSIS uninstaller) from another OS.
+name: Build installer
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build installer
+        run: npm run dist
+        env:
+          # No code-signing certificate; Windows SmartScreen will warn once.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Keep the installer as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: keystone-installer
+          path: dist/*.exe
+
+      - name: Attach to a GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
+          generate_release_notes: true

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- style-src allows inline styles only because Electron's <webview>
+       element styles itself inline; with 'self' alone it never laid out and
+       the browser stayed blank. No website code runs in this page: sites load
+       inside the webview's own isolated process. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; img-src 'self' data:">
+  <title>Keystone browser</title>
+  <link rel="stylesheet" href="../shared/base.css">
+  <link rel="stylesheet" href="browser.css">
+</head>
+<body>
+  <header class="bar">
+    <button class="icon-btn" id="back" title="Back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <button class="icon-btn" id="fwd" title="Forward" aria-label="Forward"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button class="icon-btn" id="reload" title="Reload" aria-label="Reload"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
+    <form id="addrForm" class="addr"><input class="field" id="addr" spellcheck="false" autocomplete="off" aria-label="Address"></form>
+    <select class="field links" id="links" aria-label="Go to"></select>
+    <button class="icon-btn" id="pin" title="Keep on top of the game" aria-label="Keep on top" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3v2H7v-2l3-3zM12 15v5"/></svg></button>
+    <button class="icon-btn" id="more" title="More" aria-label="More" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg></button>
+  </header>
+  <div class="menu" id="menu" hidden>
+    <label class="menu-row">See-through <input type="range" id="opacity" min="0.35" max="1" step="0.05"></label>
+    <button class="menu-item" id="setHome">Make this my start page</button>
+    <p class="menu-hint" id="hotkeyHint"></p>
+  </div>
+  <div class="progress" id="progress" hidden></div>
+  <div class="error" id="error" hidden><p id="errorText"></p></div>
+  <webview id="view" partition="persist:keystone-web" src="about:blank"></webview>
+  <script src="browser.js"></script>
+</body>
+</html>

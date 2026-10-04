@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' ksmap: data:; style-src 'self'; font-src 'self'; script-src 'self'">
+  <title>Keystone overlay</title>
+  <link rel="stylesheet" href="../shared/base.css">
+  <link rel="stylesheet" href="overlay.css">
+</head>
+<body>
+  <div class="edit-banner" id="editBanner" hidden>
+    <span>Editing overlay. Drag panels by their title, click the map to add a waypoint, scroll on the map to zoom.</span>
+    <button class="btn small primary" id="doneBtn">Done</button>
+  </div>
+
+  <section class="panel" id="panel-readouts" data-panel="readouts" hidden>
+    <header class="panel-head"><span>Stats</span></header>
+    <ul class="readouts" id="readouts"></ul>
+  </section>
+
+  <section class="panel minimap-panel" id="panel-minimap" data-panel="minimap" hidden>
+    <header class="panel-head">
+      <span id="mapTitle">Map</span>
+      <span class="edit-only size-btns">
+        <button data-size="s" aria-label="Small map">S</button>
+        <button data-size="m" aria-label="Medium map">M</button>
+        <button data-size="l" aria-label="Large map">L</button>
+      </span>
+    </header>
+    <canvas id="minimap" width="240" height="240"></canvas>
+    <footer class="map-foot">
+      <span class="coords" id="coords">Position unknown</span>
+      <span class="tracked" id="tracked"></span>
+    </footer>
+  </section>
+
+  <section class="panel info-panel" id="panel-info" data-panel="info" hidden>
+    <header class="panel-head"><span id="infoTitle">Info</span></header>
+    <div class="info-body" id="info"></div>
+  </section>
+
+  <div class="flash" id="flash" hidden></div>
+
+  <script src="../shared/map-math.js"></script>
+  <script src="overlay.js"></script>
+</body>
+</html>
