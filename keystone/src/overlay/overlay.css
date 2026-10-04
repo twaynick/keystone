@@ -1,0 +1,86 @@
+/* The window is transparent; only the panels paint. */
+html, body { background: transparent !important; overflow: hidden; user-select: none; }
+
+body.editing { background: rgba(5, 6, 8, 0.4) !important; }
+
+.panel {
+  position: absolute;
+  min-width: 180px;
+  background: rgba(18, 22, 27, 0.86) var(--sheen);
+  border: 1px solid rgba(54, 58, 65, 0.95);
+  border-radius: var(--r-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+  font-size: 13px;
+}
+body.editing .panel { outline: 2px dashed var(--accent); outline-offset: 2px; }
+
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 7px 10px; border-bottom: 1px solid var(--line);
+  font: 600 13px var(--font-display); color: var(--text);
+}
+body.editing .panel-head { cursor: grab; background: var(--accent-wash); }
+body.editing .panel.dragging .panel-head { cursor: grabbing; }
+
+.edit-only { display: none; }
+body.editing .edit-only { display: flex; }
+.size-btns { gap: 2px; }
+.size-btns button {
+  width: 22px; height: 20px; padding: 0; border: 1px solid var(--line-strong); border-radius: 4px;
+  background: var(--ink); color: var(--muted); font-size: 11px; cursor: pointer;
+}
+.size-btns button.on { border-color: var(--accent); color: var(--accent); }
+
+/* ---- readouts ---- */
+.readouts { list-style: none; margin: 0; padding: 6px 10px 8px; min-width: 190px; }
+.readouts li { display: flex; justify-content: space-between; gap: 16px; padding: 3px 0; }
+.readouts .name { color: var(--muted); }
+.readouts .val { font: 500 13px var(--font-mono); font-variant-numeric: tabular-nums; }
+.readouts li.locked .val { color: var(--accent); }
+.readouts li.waiting .val { color: var(--faint); }
+.readouts .empty { color: var(--faint); }
+
+/* ---- minimap ---- */
+.minimap-panel canvas { display: block; }
+body.editing .minimap-panel canvas { cursor: crosshair; }
+.map-foot {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 6px 10px; border-top: 1px solid var(--line);
+  font: 400 12px var(--font-mono); color: var(--muted);
+}
+.map-foot .tracked { color: var(--gold-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- info ---- */
+.info-panel { width: 300px; }
+.info-body { max-height: 42vh; overflow-y: auto; padding: 4px 0; }
+.card { padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.card:last-child { border-bottom: 0; }
+.card h3 { margin: 0 0 3px; font: 600 13px var(--font-body); }
+.card p { margin: 0; color: var(--muted); line-height: 1.4; white-space: pre-wrap; }
+
+/* ---- edit banner & flash ---- */
+.edit-banner {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 14px; padding: 8px 10px 8px 16px;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: var(--r-lg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); z-index: 10;
+}
+.flash {
+  position: absolute; bottom: 8%; left: 50%; transform: translateX(-50%);
+  padding: 9px 16px; border-radius: 8px; z-index: 10;
+  background: rgba(18, 22, 27, 0.94); border: 1px solid var(--line-strong); color: var(--text);
+}
+
+/* ---- pinned mods ---- */
+.omods { list-style: none; margin: 0; padding: 6px; min-width: 230px; }
+.omods li { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 10px; }
+body.editing .omods li { cursor: pointer; }
+body.editing .omods li:hover { background: rgba(255, 255, 255, 0.06); }
+.omods .bolt-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.omods li.on .bolt-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+.omods .name { flex: 1; color: var(--text); }
+.omods .hk { color: var(--faint); font: 500 11px var(--font-mono); }
+.omods .state { min-width: 30px; text-align: right; color: var(--faint); font-weight: 600; font-size: 12px; }
+.omods li.on .state { color: var(--accent); }

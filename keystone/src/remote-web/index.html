@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' ws:; img-src 'self' data:; style-src 'self'; font-src 'self'; script-src 'self'">
+  <meta name="theme-color" content="#0e1115">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Keystone">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" href="icon-192.png">
+  <title>Keystone</title>
+  <link rel="stylesheet" href="shared/base.css">
+  <link rel="stylesheet" href="remote.css">
+</head>
+<body>
+  <header class="bar">
+    <img class="logo" src="icon-192.png" alt="" width="28" height="28">
+    <div class="title">
+      <div class="game" id="game">Keystone</div>
+      <div class="conn" id="conn"><span class="dot"></span><span id="connText">Connecting</span></div>
+    </div>
+  </header>
+
+  <section class="notice" id="unpaired" hidden>
+    <h1>Pair this phone</h1>
+    <p>On your PC, open Keystone, go to <strong>Phone</strong>, and scan the QR code with this phone's camera.</p>
+  </section>
+
+  <section class="notice" id="rejected" hidden>
+    <h1>Pairing was reset</h1>
+    <p>This phone's pairing code no longer works. Scan the new QR code in Keystone's <strong>Phone</strong> tab.</p>
+  </section>
+
+  <section class="notice" id="idle" hidden>
+    <h1>No game attached</h1>
+    <p>Pick a game in Keystone on your PC. Its mods show up here as soon as it's attached.</p>
+  </section>
+
+  <section class="notice" id="noMods" hidden>
+    <h1>No mods loaded</h1>
+    <p>Load a cheat table for this game in Keystone on your PC.</p>
+  </section>
+
+  <main id="mods" hidden>
+    <div class="profile-row" id="profileRow" hidden>
+      <select class="field" id="profile" aria-label="Profile"></select>
+    </div>
+    <div id="list"></div>
+    <section class="tp" id="teleport" hidden>
+      <h2 class="tp-head">Teleport</h2>
+      <div id="tpList"></div>
+    </section>
+  </main>
+
+  <div class="sheet-backdrop" id="backdrop" hidden></div>
+  <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetName" hidden>
+    <div class="grip" aria-hidden="true"></div>
+    <h2 id="sheetName"></h2>
+    <div class="sheet-current"><span id="sheetCurrent"></span><span class="sheet-label">in game now</span></div>
+    <input class="field sheet-input" id="sheetInput" inputmode="decimal" placeholder="New value" autocomplete="off">
+    <div class="sheet-actions">
+      <button class="btn" id="sheetSet">Set once</button>
+      <button class="btn primary" id="sheetLock">Lock at this value</button>
+    </div>
+    <button class="btn ghost sheet-unlock" id="sheetUnlock">Unlock</button>
+  </section>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script src="shared/theme.js"></script>
+  <script src="remote.js"></script>
+</body>
+</html>

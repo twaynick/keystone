@@ -1,0 +1,303 @@
+{
+  "name": "Fallout 4",
+  "exe": [
+    "Fallout4.exe"
+  ],
+  "art": {
+    "steamAppId": 377160
+  },
+  "info": [
+    {
+      "title": "Commands",
+      "body": "Open Commands in Keystone's sidebar. Keystone opens the console with the ~ key, types the command, presses Enter and closes the console again."
+    },
+    {
+      "title": "DLC items",
+      "body": "Keystone's item list covers the base game. DLC item IDs change with your load order; the Form IDs guide in the Library explains how to work them out."
+    }
+  ],
+  "library": {
+    "sections": [
+      {
+        "id": "items",
+        "label": "Items",
+        "catalog": "items",
+        "idLabel": "Form ID"
+      }
+    ],
+    "guides": "guides",
+    "wiki": {
+      "label": "Fallout Wiki",
+      "base": "https://fallout.wiki"
+    },
+    "links": [
+      {
+        "label": "Fallout Wiki",
+        "url": "https://fallout.wiki/wiki/Fallout_4"
+      },
+      {
+        "label": "Nexus Mods",
+        "url": "https://www.nexusmods.com/fallout4"
+      }
+    ]
+  },
+  "commands": {
+    "credits": "Item names and Form IDs from the Independent Fallout Wiki (fallout.wiki), community-maintained. Base game only.",
+    "console": {
+      "key": "Backquote",
+      "prefixes": [
+        ""
+      ],
+      "keepsOpen": true,
+      "paste": false
+    },
+    "catalogs": {
+      "items": "items.json"
+    },
+    "actions": [
+      {
+        "id": "give-item",
+        "label": "Give to me",
+        "catalog": "items",
+        "template": "player.additem {id} {qty}",
+        "help": "Adds the item to your inventory.",
+        "fields": [
+          {
+            "key": "qty",
+            "label": "Quantity",
+            "type": "number",
+            "default": 1,
+            "min": 1,
+            "max": 100000
+          }
+        ]
+      },
+      {
+        "id": "drop-item",
+        "label": "Drop at my feet",
+        "catalog": "items",
+        "template": "player.placeatme {id} {qty}",
+        "help": "Places the item on the ground next to you, handy for heavy things you don't want to carry.",
+        "fields": [
+          {
+            "key": "qty",
+            "label": "Quantity",
+            "type": "number",
+            "default": 1,
+            "min": 1,
+            "max": 100
+          }
+        ]
+      }
+    ],
+    "quick": [
+      {
+        "id": "tgm",
+        "label": "God mode",
+        "template": "tgm",
+        "help": "Toggles no damage, unlimited ammo and AP, and no carry limit."
+      },
+      {
+        "id": "tim",
+        "label": "Can't die",
+        "template": "tim",
+        "help": "Toggles immortal mode: you take damage but your health never hits zero."
+      },
+      {
+        "id": "tcl",
+        "label": "No clip",
+        "template": "tcl",
+        "help": "Toggles walking through walls and flying."
+      },
+      {
+        "id": "tfc",
+        "label": "Free camera",
+        "template": "tfc",
+        "help": "Toggles a camera you can fly around, for screenshots."
+      },
+      {
+        "id": "tm",
+        "label": "Hide the HUD",
+        "template": "tm",
+        "help": "Toggles all on-screen menus. Run it again to bring them back."
+      },
+      {
+        "id": "tmm",
+        "label": "Show every map location",
+        "template": "tmm 1",
+        "help": "Reveals every map marker. This can't be undone in this save."
+      },
+      {
+        "id": "caps",
+        "label": "Give me caps",
+        "template": "player.additem 0000000F {amount}",
+        "fields": [
+          {
+            "key": "amount",
+            "label": "Caps",
+            "type": "number",
+            "default": 1000,
+            "min": 1,
+            "max": 1000000
+          }
+        ]
+      },
+      {
+        "id": "perks",
+        "label": "Give me perk points",
+        "template": "CGF \"Game.AddPerkPoints\" {points}",
+        "fields": [
+          {
+            "key": "points",
+            "label": "Points",
+            "type": "number",
+            "default": 1,
+            "min": 1,
+            "max": 100
+          }
+        ]
+      },
+      {
+        "id": "level",
+        "label": "Set my level",
+        "template": "player.setlevel {level}",
+        "help": "Sets your level. It can't take you below your current level.",
+        "fields": [
+          {
+            "key": "level",
+            "label": "Level",
+            "type": "number",
+            "default": 50,
+            "min": 1,
+            "max": 500
+          }
+        ]
+      },
+      {
+        "id": "special",
+        "label": "Set a S.P.E.C.I.A.L. stat",
+        "template": "player.setav {stat} {value}",
+        "help": "Changes the base value. Perks that need a higher stat unlock right away.",
+        "fields": [
+          {
+            "key": "stat",
+            "label": "Stat",
+            "type": "choice",
+            "options": [
+              {
+                "value": "strength",
+                "label": "Strength"
+              },
+              {
+                "value": "perception",
+                "label": "Perception"
+              },
+              {
+                "value": "endurance",
+                "label": "Endurance"
+              },
+              {
+                "value": "charisma",
+                "label": "Charisma"
+              },
+              {
+                "value": "intelligence",
+                "label": "Intelligence"
+              },
+              {
+                "value": "agility",
+                "label": "Agility"
+              },
+              {
+                "value": "luck",
+                "label": "Luck"
+              }
+            ]
+          },
+          {
+            "key": "value",
+            "label": "Value",
+            "type": "number",
+            "default": 10,
+            "min": 1,
+            "max": 100
+          }
+        ]
+      },
+      {
+        "id": "carry",
+        "label": "Add carry weight",
+        "template": "player.modav carryweight {amount}",
+        "fields": [
+          {
+            "key": "amount",
+            "label": "Extra pounds",
+            "type": "number",
+            "default": 500,
+            "min": 1,
+            "max": 100000
+          }
+        ]
+      },
+      {
+        "id": "speed",
+        "label": "Set run speed",
+        "template": "player.setav speedmult {percent}",
+        "help": "100 is normal speed.",
+        "fields": [
+          {
+            "key": "percent",
+            "label": "Speed (%)",
+            "type": "number",
+            "default": 150,
+            "min": 10,
+            "max": 1000
+          }
+        ]
+      },
+      {
+        "id": "time",
+        "label": "Set time of day",
+        "template": "set gamehour to {hour}",
+        "fields": [
+          {
+            "key": "hour",
+            "label": "Hour (0 to 23)",
+            "type": "number",
+            "default": 12,
+            "min": 0,
+            "max": 23
+          }
+        ]
+      },
+      {
+        "id": "timescale",
+        "label": "Set how fast time passes",
+        "template": "set timescale to {scale}",
+        "help": "The default is 20: one game hour every three real minutes.",
+        "fields": [
+          {
+            "key": "scale",
+            "label": "Timescale",
+            "type": "number",
+            "default": 20,
+            "min": 1,
+            "max": 1000
+          }
+        ]
+      },
+      {
+        "id": "csb",
+        "label": "Clear blood from the screen",
+        "template": "csb"
+      },
+      {
+        "id": "killall",
+        "label": "Kill everyone nearby",
+        "template": "killall",
+        "help": "Kills every non-essential character in the area.",
+        "confirm": "Kill every non-essential character nearby? That includes friendly settlers and traders in the area."
+      }
+    ]
+  }
+}
