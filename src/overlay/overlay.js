@@ -1,6 +1,6 @@
 'use strict';
 
-/* global overlayApi, MapMath, KeystoneTheme */
+/* global overlayApi, MapMath, KeystoneTheme, Crosshair */
 
 const $ = (id) => document.getElementById(id);
 const SIZES = { s: 180, m: 240, l: 320 };
@@ -57,23 +57,25 @@ function lerpAngle(a, b, t) {
 }
 
 let flashTimer;
-function flash(text) {
+function flash(text, ms = 2200) {
   const f = $('flash');
   f.textContent = text;
   f.hidden = false;
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => { f.hidden = true; }, 2200);
+  flashTimer = setTimeout(() => { f.hidden = true; }, ms);
 }
 
 // ---------- panels ----------
 function placePanels() {
   const st = ov.state;
-  for (const id of ['readouts', 'minimap', 'info', 'mods']) {
+  for (const id of ['readouts', 'minimap', 'info', 'mods', 'timers', 'checklist', 'pcstats']) {
     const panel = $(`panel-${id}`);
     const conf = st.panels?.[id];
     const hasContent = id === 'readouts' ? st.readouts?.length > 0 || ov.editing
       : id === 'info' ? (st.info?.length || st.notes) || ov.editing
       : id === 'mods' ? st.mods?.length > 0
+      : id === 'timers' ? st.timers?.length > 0
+      : id === 'checklist' ? Boolean(st.checklist)
       : true;
     panel.hidden = !st.attached || !conf?.visible || !hasContent;
     if (!panel.hidden && !panel.classList.contains('dragging')) {
@@ -140,6 +142,131 @@ function paintMods() {
     if (!li || !v) continue;
     li.classList.toggle('on', Boolean(v.enabled));
     li.querySelector('.state').textContent = v.enabled ? 'On' : 'Off';
+  }
+}
+
+// ---------- timers ----------
+// Times come from end timestamps, so the countdown is redrawn locally each
+// frame instead of waiting for updates from the main process.
+function fmtLeft(ms) {
+  const t = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = String(t % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
+function renderTimers() {
+  const ul = $('otimers');
+  ul.replaceChildren(...(ov.state.timers || []).map((t) => {
+    const li = el('li', { 'data-id': t.id, class: t.state }, el('span', { class: 'name', text: t.name }), el('span', { class: 'left' }));
+    li.addEventListener('click', () => { if (ov.editing) overlayApi.toggleTimer(t.id); });
+    return li;
+  }));
+  paintTimers();
+}
+
+function paintTimers() {
+  const now = Date.now();
+  for (const t of ov.state.timers || []) {
+    const li = document.querySelector(`.otimers li[data-id="${CSS.escape(t.id)}"]`);
+    if (!li) continue;
+    const left = t.state === 'running' ? t.endsAt - now : t.remainingMs;
+    li.querySelector('.left').textContent = t.state === 'done' ? 'Done' : fmtLeft(left);
+  }
+}
+
+// ---------- crosshair ----------
+// Drawn into a small canvas pinned at the screen centre (plus any offset),
+// at the display's pixel density so thin lines stay sharp.
+function renderCrosshair() {
+  const c = ov.state.crosshair;
+  const cv = $('crosshair');
+  cv.hidden = !ov.state.attached || !c?.on;
+  if (cv.hidden) return;
+  const dpr = window.devicePixelRatio || 1;
+  const size = Crosshair.extent(c);
+  cv.width = Math.round(size * dpr);
+  cv.height = Math.round(size * dpr);
+  cv.style.width = `${size}px`;
+  cv.style.height = `${size}px`;
+  cv.style.marginLeft = `${-size / 2 + c.dx}px`;
+  cv.style.marginTop = `${-size / 2 + c.dy}px`;
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, size, size);
+  Crosshair.draw(ctx, c, size / 2, size / 2, ov.colors.accent);
+}
+
+// ---------- PC stats ----------
+let pc = null;
+const gb = (b) => (b / 1024 ** 3).toFixed(1);
+function paintPc() {
+  const st = ov.state;
+  const want = st.pcstats || {};
+  const rows = [];
+  if (want.cpu && pc) rows.push(['CPU', `${pc.cpu}%`, pc.cpu >= 90]);
+  if (want.ram && pc) rows.push(['RAM', `${gb(pc.ramUsed)} / ${gb(pc.ramTotal)} GB`, pc.ramUsed / pc.ramTotal >= 0.9]);
+  if (want.clock) rows.push(['Time', new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), false]);
+  if (want.session && st.since) rows.push(['Playing', fmtLeft(Date.now() - st.since), false]);
+  const ul = $('pcstats');
+  const key = rows.map((r) => r[0]).join('|');
+  if (ul.dataset.key !== key) {
+    ul.dataset.key = key;
+    ul.replaceChildren(...rows.map(([name]) => el('li', { 'data-k': name }, el('span', { class: 'name', text: name }), el('span', { class: 'val' }))));
+    if (!rows.length) ul.append(el('li', { class: 'empty', text: 'Pick what to show in Keystone\u2019s Overlay tab.' }));
+  }
+  for (const [name, val, hot] of rows) {
+    const li = ul.querySelector(`li[data-k="${name}"]`);
+    li.querySelector('.val').textContent = val;
+    li.classList.toggle('waiting', false);
+    li.classList.toggle('locked', hot);
+  }
+}
+
+// ---------- checklist ----------
+function renderChecklist() {
+  const l = ov.state.checklist;
+  $('listTitle').textContent = l ? l.name : 'Checklist';
+  $('listCount').textContent = l ? `${l.items.filter((i) => i.done).length}/${l.items.length}` : '';
+  $('olist').replaceChildren(...(l?.items || []).map((i) => {
+    const li = el('li', { class: i.done ? 'done' : '' }, el('span', { class: 'box' }), el('span', { class: 'text', text: i.text }));
+    li.addEventListener('click', () => { if (ov.editing) overlayApi.checkListItem(l.id, i.id); });
+    return li;
+  }));
+}
+
+// ---------- alerts ----------
+// A short two-note chime from Web Audio: no sound file to ship, and it can't
+// fail to load.
+let audio = null;
+function chime() {
+  try {
+    audio = audio || new AudioContext();
+    const t0 = audio.currentTime;
+    for (const [i, freq] of [[0, 880], [1, 1318.5]]) {
+      const o = audio.createOscillator();
+      const g = audio.createGain();
+      o.type = 'sine';
+      o.frequency.value = freq;
+      const at = t0 + i * 0.18;
+      g.gain.setValueAtTime(0, at);
+      g.gain.linearRampToValueAtTime(0.25, at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, at + 0.5);
+      o.connect(g).connect(audio.destination);
+      o.start(at);
+      o.stop(at + 0.55);
+    }
+  } catch { /* no audio device: the flash still shows */ }
+}
+
+function alertBanner(text) {
+  flash(text, 6000);
+  chime();
+  for (const li of document.querySelectorAll('.otimers li.done')) {
+    li.classList.remove('ringing');
+    void li.offsetWidth; // restart the animation
+    li.classList.add('ringing');
   }
 }
 
@@ -386,8 +513,11 @@ function paintFooter(pos, v) {
   $('tracked').textContent = `${w.name} ${latlon() ? dist.toFixed(1) : Math.round(dist).toLocaleString()} ${ARROWS[idx]}`;
 }
 
+let lastPcPaint = 0;
 function frame(now) {
   drawMinimap(now);
+  paintTimers();
+  if (now - lastPcPaint > 1000 && !$('panel-pcstats').hidden) { lastPcPaint = now; paintPc(); }
   requestAnimationFrame(frame);
 }
 
@@ -477,7 +607,13 @@ overlayApi.onState((st) => {
   renderReadouts();
   renderInfo();
   renderMods();
+  renderTimers();
+  renderChecklist();
+  renderCrosshair();
+  paintPc();
 });
+overlayApi.onPc((s) => { pc = s; paintPc(); });
+window.addEventListener('resize', renderCrosshair);
 
 overlayApi.onValues((v) => {
   ov.values = v;
@@ -501,14 +637,15 @@ overlayApi.onMode(({ editing }) => {
 });
 
 overlayApi.onFlash(flash);
+overlayApi.onAlert(alertBanner);
 
 // Canvas colors follow the accent too, so read them from CSS after each change.
 function readColors() {
   const cs = getComputedStyle(document.documentElement);
   ov.colors = { accent: cs.getPropertyValue('--accent').trim() || '#c48aff', glow: cs.getPropertyValue('--accent-glow').trim() };
 }
-overlayApi.appearance().then((r) => { if (r.ok) KeystoneTheme.applyAccent(r.data.accent); readColors(); });
-overlayApi.onAppearance((a) => { KeystoneTheme.applyAccent(a.accent); readColors(); });
+overlayApi.appearance().then((r) => { if (r.ok) KeystoneTheme.applyAccent(r.data.accent); readColors(); renderCrosshair(); });
+overlayApi.onAppearance((a) => { KeystoneTheme.applyAccent(a.accent); readColors(); renderCrosshair(); });
 readColors();
 
 wireDragging();

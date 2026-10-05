@@ -27,6 +27,8 @@ class Controller extends EventEmitter {
     // Electron's clipboard ({ readText, writeText }); Find me reads ARK's ccc
     // output from it. Injected so tests can fake it.
     this.clipboard = clipboard;
+    // App-wide countdown timers (timers.js), set by main once settings exist.
+    this.timers = null;
     this.packsDir = packsDir;
     // Bundled packs, plus a folder where users can drop their own.
     this.userPacksDir = path.join(dataDir, 'packs');
@@ -109,7 +111,7 @@ class Controller extends EventEmitter {
     // Picked from the library while not running: selected "offline" so RCON,
     // the map, waypoints and the Library still work.
     const offline = !demo && !pid;
-    this.game = { key: String(name).toLowerCase(), name, pid, demo: Boolean(demo), offline };
+    this.game = { key: String(name).toLowerCase(), name, pid, demo: Boolean(demo), offline, since: offline ? null : Date.now() };
     this.modsError = null;
     // Re-read packs on every attach so a pack dropped into the folder while
     // Keystone is open gets picked up without a restart.
@@ -284,6 +286,7 @@ class Controller extends EventEmitter {
     if (this.game) {
       this.game.pid = null;
       this.game.offline = true;
+      this.game.since = null;
       this.modsError = 'the game isn\u2019t running';
     }
     this.emit('detached', { name });
@@ -542,6 +545,9 @@ class Controller extends EventEmitter {
       installed: (this.pack && this._installedHits?.get(this.pack.id)?.store) || null,
       displayName: this.game.demo ? 'Demo game' : (this.pack?.name || this.game.name.replace(/\.exe$/i, '')),
       hasCommands: Boolean(this.pack?.commands),
+      // Timers are app-wide; the checklist is the one the overlay shows.
+      timers: this.timers ? this.timers.list() : [],
+      checklist: this.overlay.activeList(),
       // For the phone's Teleport list.
       teleport: this.overlay.teleportMethod()
         ? { waypoints: this.overlay.waypoints().map((w) => ({ id: w.id, name: w.name })), tracked: this.store.load(this.game.key).overlay.tracked || null }

@@ -84,3 +84,11 @@ body {
 /* Teleport list, under the mods. */
 .tp-head { margin: 0; padding: 20px 18px 10px; font: 600 16px var(--font-display); color: var(--text); }
 .row.tracked .row-value { color: var(--accent); }
+
+/* Timers and checklist */
+.row.timer.done .row-value { color: var(--accent); }
+.row.timer.paused .row-value, .row.timer.idle .row-value { color: var(--faint); }
+.check-row { min-height: 52px; cursor: pointer; }
+.check-row input { width: 22px; height: 22px; flex: none; accent-color: var(--accent); }
+.check-row .row-name { white-space: normal; }
+.check-row.done .row-name { color: var(--faint); text-decoration: line-through; }

@@ -454,5 +454,31 @@
         "confirm": "Remove every wild creature on the server? They respawn over time, but anything you were taming is gone."
       }
     ]
-  }
+  },
+  "checklists": [
+    {
+      "name": "Island artifacts",
+      "items": [
+        "Artifact of the Clever (Central Cave)",
+        "Artifact of the Skylord (North West Cave)",
+        "Artifact of the Hunter (Lower South Cave)",
+        "Artifact of the Devourer (North East Cave)",
+        "Artifact of the Pack (Upper South Cave)",
+        "Artifact of the Massive (Lava Cave)",
+        "Artifact of the Immune (Swamp Cave)",
+        "Artifact of the Strong (Snow Cave)",
+        "Artifact of the Brute (Caverns of Lost Faith)",
+        "Artifact of the Cunning (Caverns of Lost Hope)"
+      ]
+    },
+    {
+      "name": "Island bosses",
+      "items": [
+        "Broodmother Lysrix",
+        "Megapithecus",
+        "Dragon",
+        "Overseer"
+      ]
+    }
+  ]
 }

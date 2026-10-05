@@ -204,6 +204,14 @@ class RemoteServer extends EventEmitter {
         case 'apply': c.applyValue(String(msg.id), msg.value); return reply(true);
         case 'applyProfile': return reply(true, { data: c.applyProfile(String(msg.name)) });
         case 'saveProfile': return reply(true, { data: c.saveProfile(String(msg.name)) });
+        case 'timer': {
+          const t = c.timers;
+          if (!t) return reply(false, { error: 'Timers aren\u2019t available.' });
+          const fn = { toggle: 'toggle', reset: 'reset' }[msg.action];
+          if (!fn) return reply(false, { error: 'Unknown timer action.' });
+          return reply(true, { data: t[fn](String(msg.id)) });
+        }
+        case 'check': return reply(true, { data: c.overlay.checkItem(String(msg.listId), String(msg.itemId)) });
         case 'teleport':
           c.overlay.teleport({ waypointId: String(msg.waypointId) })
             .then((r) => reply(true, { data: { name: r.name } }), (err) => reply(false, { error: err.message }));

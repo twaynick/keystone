@@ -23,6 +23,10 @@ const OVERLAY_DEFAULTS = () => ({
   roles: null,         // { x, y, z, facing } -> record ids
   map: null,           // { image: abs path, bounds } ; bounds may be null until calibrated
   waypoints: null,     // [{ id, name, x, y, z }] ; seeded from the pack on first attach
+  checklists: null,    // [{ id, name, items: [{ id, text, done }] }] ; seeded from the pack once
+  activeList: null,    // checklist shown in the overlay
+  crosshair: null,     // see shared/crosshair.js; null = defaults (off)
+  pcstats: { cpu: true, ram: true, clock: true, session: true },
   tracked: null,       // waypoint id shown with distance/direction on the minimap
   readouts: [],        // record ids shown as live values in the overlay
   notes: '',
@@ -34,6 +38,10 @@ const OVERLAY_DEFAULTS = () => ({
     minimap: { x: 0.80, y: 0.03, visible: true, size: 'm' },
     info: { x: 0.015, y: 0.32, visible: true },
     mods: { x: 0.80, y: 0.45, visible: true },
+    timers: { x: 0.80, y: 0.62, visible: true },
+    checklist: { x: 0.015, y: 0.62, visible: true },
+    // Off until asked for: most people only want it while troubleshooting.
+    pcstats: { x: 0.80, y: 0.80, visible: false },
   },
 });
 

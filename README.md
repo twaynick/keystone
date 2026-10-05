@@ -181,6 +181,17 @@ Waypoints can be renamed, moved, tracked (distance and direction show under the 
 
 **Teleporting** writes your position through the game's position mods, so it needs mods connected and the X and Y position mods set in the Overlay tab (game packs set them for you). It holds the new spot for a moment so the game doesn't pull you back. If the waypoint has no height saved, you keep your current height, so on hilly maps you may land inside a slope; walk or jump out. Games with a teleport console command can use that instead, and then it works without mods. Offline-only games follow the same rule as other mods: off until you turn mods on for that game.
 
+#### Timers and checklists
+
+- **Timers:** add them in the Overlay tab with a name and a length (`15m`, `1h 30m`, `2:30`, or just `10` for ten minutes); tick **Repeat** for things that come round again. They show in the overlay's Timers panel, and when one runs out you get a chime and a flash in the overlay, a toast on your phone, and a Windows notification. Timers are app-wide and keep counting while you switch games or close Keystone (one that ends while Keystone is closed shows as done, without a late alert).
+- **Checklists:** per game. Game packs can bring starters (ARK has the Island's artifacts and bosses); add your own, tick items, untick all for a new run. The one you pick is shown in the overlay and on your phone.
+- Start or pause a timer, or tick an item, from the overlay by clicking it while editing the layout, or from the phone remote at any time.
+
+#### Crosshair and PC stats
+
+- **Crosshair:** under *Crosshair* in the Overlay tab: cross, cross + dot, T, dot or circle, with size, thickness, gap, opacity, colour, a dark outline, and a nudge if the game's centre isn't the screen's. Saved per game. It's drawn by Keystone's overlay window, so it works in any game that runs borderless or windowed. Some competitive games don't allow crosshair overlays; check before using one there.
+- **PC stats:** turn on the *PC stats* panel to see CPU use, RAM, the time, and how long you've been playing. These come from Windows, never from the game.
+
 Notes:
 
 - Run the game in **borderless** or **windowed** mode. Exclusive fullscreen draws over every other window, including the overlay.
@@ -226,7 +237,9 @@ src/main/            Electron main process
   store.js           per-game settings and profiles on disk
   settings.js        app-wide settings (phone remote, overlay)
   packs.js           game packs
-  overlay-model.js   overlay data: position, map, waypoints, stats
+  overlay-model.js   overlay data: position, map, waypoints, checklists, stats
+  timers.js          countdown timers and their alerts
+  pcstats.js         CPU and RAM for the overlay's PC panel
   overlay-window.js  the see-through overlay window and its hotkeys
   commands/
     model.js         command templates, validation, history, routing
@@ -250,7 +263,7 @@ src/remote-web/      phone web app (served to the phone by remote/server.js)
 src/overlay/         overlay page (minimap, stats, info)
 src/browser/         the browser window's toolbar page
 assets/              app icons
-src/shared/          shared styles, accent themes, Geist fonts (OFL), map math
+src/shared/          shared styles, accent themes, Geist fonts (OFL), map math, crosshair drawing
 packs/demo/          the demo game's pack: table, map, waypoints, info
 packs/ark-survival-ascended/  ASA pack: commands, creature and item IDs, guides
 packs/fallout-4/     Fallout 4 pack: console commands, 648 base-game items, guides
@@ -260,6 +273,15 @@ scripts/capture.js   dev helper: launch, run a snippet, save a screenshot
 ```
 
 ## Changelog
+
+### 0.14.2
+- Crosshair overlay with five styles, size, thickness, gap, opacity, colour, outline and nudge, with a live preview; saved per game.
+- PC stats panel: CPU, RAM, the time and play time, read from Windows (never from the game).
+
+### 0.14.1
+- Timers: countdowns in the overlay with a chime, phone toast and Windows notification when they run out; repeat, pause, and they keep counting across games and restarts.
+- Checklists per game, shown in the overlay and on the phone; ARK starts with the Island's artifacts and bosses.
+- Phone remote: Timers and Checklist sections, and timer alerts as toasts.
 
 ### 0.14.0
 - Map for any game, mods or not: an **I'm here** marker you set by clicking the map, and per-pack marker layers you can switch on and off.

@@ -372,6 +372,61 @@
             <div class="wp-list" id="wpList"></div>
           </section>
 
+          <section class="block">
+            <h2>Timers</h2>
+            <p class="block-note">Countdowns in the overlay, with a chime and a Windows notification when they run out. They keep counting when you switch games or close Keystone. Click one in the overlay while editing the layout to start or pause it, or use your phone.</p>
+            <form class="timer-add" id="timerForm" autocomplete="off">
+              <input class="field" id="timerName" placeholder="Name, like Egg hatch" maxlength="30" aria-label="Timer name">
+              <input class="field" id="timerLen" placeholder="15m, 1h 30m or 2:30" aria-label="How long">
+              <label class="check"><input type="checkbox" id="timerRepeat"> Repeat</label>
+              <button class="btn small primary" type="submit">Add timer</button>
+            </form>
+            <div class="timer-list" id="timerList"></div>
+          </section>
+
+          <section class="block">
+            <div class="block-head">
+              <h2>Checklists</h2>
+              <button class="btn small" id="listNew">New checklist</button>
+            </div>
+            <p class="block-note">The checklist you pick here is the one in the overlay and on your phone.</p>
+            <div class="cat-tabs list-tabs" id="listTabs" role="tablist"></div>
+            <div class="list-body" id="listBody"></div>
+          </section>
+
+          <section class="block">
+            <div class="block-head">
+              <h2>Crosshair</h2>
+              <label class="page-enable">
+                <span>Show crosshair</span>
+                <span class="switch"><input type="checkbox" role="switch" id="xhOn"><span class="track"></span></span>
+              </label>
+            </div>
+            <p class="block-note">A crosshair at the centre of the screen, for games that hide theirs or don't have one. Saved per game. It's drawn by the overlay window, not inside the game.</p>
+            <div class="xh-grid">
+              <canvas id="xhPreview" width="240" height="180" aria-label="Crosshair preview"></canvas>
+              <div class="xh-controls">
+                <div class="seg xh-style" id="xhStyle" role="group" aria-label="Style">
+                  <button data-v="cross">Cross</button>
+                  <button data-v="crossdot">Cross + dot</button>
+                  <button data-v="tee">T</button>
+                  <button data-v="dot">Dot</button>
+                  <button data-v="circle">Circle</button>
+                </div>
+                <label class="xh-range">Size <input type="range" class="slider" data-xh="size" min="2" max="40" step="1"><output></output></label>
+                <label class="xh-range">Thickness <input type="range" class="slider" data-xh="thickness" min="1" max="8" step="1"><output></output></label>
+                <label class="xh-range">Gap <input type="range" class="slider" data-xh="gap" min="0" max="30" step="1"><output></output></label>
+                <label class="xh-range">Opacity <input type="range" class="slider" data-xh="opacity" min="0.2" max="1" step="0.05"><output></output></label>
+                <div class="xh-colors" id="xhColors" role="radiogroup" aria-label="Colour"></div>
+                <div class="xh-row">
+                  <label class="check"><input type="checkbox" id="xhOutline"> Dark outline</label>
+                  <label class="inline-field">Nudge X <input class="field xh-num" data-xh="dx" inputmode="numeric"></label>
+                  <label class="inline-field">Y <input class="field xh-num" data-xh="dy" inputmode="numeric"></label>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section class="block two-col">
             <div>
               <h2>Panels</h2>
@@ -379,6 +434,17 @@
                 <label class="check"><input type="checkbox" data-panel="minimap"> Minimap</label>
                 <label class="check"><input type="checkbox" data-panel="readouts"> Stats</label>
                 <label class="check"><input type="checkbox" data-panel="info"> Info and notes</label>
+                <label class="check"><input type="checkbox" data-panel="mods"> Pinned mods</label>
+                <label class="check"><input type="checkbox" data-panel="timers"> Timers</label>
+                <label class="check"><input type="checkbox" data-panel="checklist"> Checklist</label>
+                <label class="check"><input type="checkbox" data-panel="pcstats"> PC stats</label>
+              </div>
+              <div class="pc-picks" id="pcPicks">
+                <span class="block-note">PC stats shows:</span>
+                <label class="check"><input type="checkbox" data-pc="cpu"> CPU</label>
+                <label class="check"><input type="checkbox" data-pc="ram"> RAM</label>
+                <label class="check"><input type="checkbox" data-pc="clock"> Time</label>
+                <label class="check"><input type="checkbox" data-pc="session"> Playing time</label>
               </div>
               <label class="inline-field">Map size
                 <select class="field" id="ovSize"><option value="s">Small</option><option value="m">Medium</option><option value="l">Large</option></select>
@@ -531,6 +597,7 @@
   <div class="toasts" id="toasts" aria-live="polite"></div>
   <script src="../shared/theme.js"></script>
   <script src="../shared/map-math.js"></script>
+  <script src="../shared/crosshair.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

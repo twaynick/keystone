@@ -55,6 +55,33 @@ body.editing .minimap-panel canvas { cursor: crosshair; }
 }
 .map-foot .tracked { color: var(--gold-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* ---- timers ---- */
+.otimers { list-style: none; margin: 0; padding: 6px 10px 8px; min-width: 200px; }
+.otimers li { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 3px 0; }
+.otimers .name { color: var(--muted); }
+.otimers .left { font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text); }
+.otimers li.paused .left, .otimers li.idle .left { color: var(--faint); }
+.otimers li.done .left { color: var(--accent); }
+.otimers li.done .name { color: var(--text); }
+.otimers li.ringing { animation: ring 0.5s ease-in-out 6 alternate; }
+@keyframes ring { from { background: transparent; } to { background: var(--accent-wash); } }
+body.editing .otimers li, body.editing .olist li { cursor: pointer; }
+
+/* ---- checklist ---- */
+.list-panel { width: 260px; }
+.list-count { font: 500 12px var(--font-mono); color: var(--muted); }
+.olist { list-style: none; margin: 0; padding: 6px 10px 8px; max-height: 40vh; overflow-y: auto; }
+.olist li { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; line-height: 1.35; }
+.olist .box { flex: none; width: 13px; height: 13px; margin-top: 2px; border: 1.5px solid var(--line-strong); border-radius: 3px; }
+.olist li.done .box { background: var(--accent); border-color: var(--accent); }
+.olist li.done .text { color: var(--faint); text-decoration: line-through; }
+
+/* ---- PC stats ---- */
+.pcstats { min-width: 150px; }
+
+/* ---- crosshair: fixed at the screen centre, never takes clicks ---- */
+.crosshair { position: fixed; left: 50%; top: 50%; pointer-events: none; z-index: 5; }
+
 /* ---- info ---- */
 .info-panel { width: 300px; }
 .info-body { max-height: 42vh; overflow-y: auto; padding: 4px 0; }

@@ -30,7 +30,8 @@ const path = require('path');
 //                 "bounds": { "left": 0, "right": 100, "top": 0, "bottom": 100 },
 //                 "coords": { "lat": { "shift": 50, "div": 6850 }, "lon": { "shift": 50, "div": 6850 } },
 //                 "markers": "markers/the-island.json", "image": "optional.png" } ],
-//     "findMe": { "command": "ccc" }      // ARK-style: the command copies "X Y Z ..." to the clipboard
+//     "findMe": { "command": "ccc" },     // ARK-style: the command copies "X Y Z ..." to the clipboard
+//     "checklists": [ { "name": "Bosses", "items": ["Broodmother", "Megapithecus"] } ]
 //   }
 //
 // Every field is optional. Anything the user changes in Keystone is saved per
@@ -90,6 +91,11 @@ function normalize(raw, folder, id) {
     maps: mapsOf(raw, folder),
     findMe: raw.findMe && typeof raw.findMe.command === 'string' && raw.findMe.command.trim()
       ? { command: raw.findMe.command.trim() } : null,
+    // Starter checklists, copied into the game's settings once (like
+    // waypoints) so they can be ticked, edited and deleted.
+    checklists: (Array.isArray(raw.checklists) ? raw.checklists : [])
+      .filter((l) => l && l.name && Array.isArray(l.items))
+      .map((l) => ({ name: String(l.name).slice(0, 40), items: l.items.filter((i) => typeof i === 'string' && i.trim()).map((i) => i.trim().slice(0, 80)) })),
   };
 }
 

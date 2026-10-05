@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const MapMath = require('../shared/map-math');
+const Crosshair = require('../shared/crosshair');
 
 // Overlay data for the attached game: where the player is, the map, waypoints,
 // live readouts and info cards. Pure Node so it can be tested without
@@ -13,6 +14,8 @@ const MapMath = require('../shared/map-math');
 
 const ROLES = ['x', 'y', 'z', 'facing'];
 const MAX_WAYPOINTS = 200;
+const MAX_LISTS = 20;
+const MAX_ITEMS = 100;
 
 class OverlayModel {
   constructor(controller, { dataDir }) {
@@ -48,6 +51,12 @@ class OverlayModel {
   // Called by the controller right after a game is attached and its tables load.
   onAttach() {
     const ov = this._data();
+    if (ov.checklists === null) {
+      const lists = (this.pack?.checklists || []).slice(0, MAX_LISTS).map((l) => ({
+        id: newId(), name: l.name, items: l.items.slice(0, MAX_ITEMS).map((text) => ({ id: newId(), text, done: false })),
+      }));
+      this.c.store.update(this.game.key, (d) => { d.overlay.checklists = lists; d.overlay.activeList = lists[0]?.id || null; });
+    }
     if (ov.waypoints === null && this.pack?.waypoints.length) {
       // Copy pack waypoints into the game's settings once, so the user can
       // rename or delete them like their own.
@@ -402,6 +411,118 @@ class OverlayModel {
     return true;
   }
 
+  // ---------- crosshair, PC stats ----------
+  crosshair() {
+    return Crosshair.normalize(this._data().crosshair || Crosshair.DEFAULTS);
+  }
+
+  setCrosshair(patch = {}) {
+    this._require();
+    const next = Crosshair.normalize({ ...this.crosshair(), ...patch });
+    this._update((ov) => { ov.crosshair = next; });
+    return next;
+  }
+
+  setPcStats(patch = {}) {
+    this._require();
+    const cur = this._data().pcstats || {};
+    const next = { ...cur };
+    for (const k of ['cpu', 'ram', 'clock', 'session']) if (patch[k] !== undefined) next[k] = Boolean(patch[k]);
+    this._update((ov) => { ov.pcstats = next; });
+    return next;
+  }
+
+  // ---------- checklists ----------
+  checklists() {
+    return this._data().checklists || [];
+  }
+
+  activeList() {
+    const lists = this.checklists();
+    return lists.find((l) => l.id === this._data().activeList) || lists[0] || null;
+  }
+
+  _list(id) {
+    const l = this.checklists().find((x) => x.id === id);
+    if (!l) throw new Error('That checklist no longer exists.');
+    return l;
+  }
+
+  // Lists are small, so every change rewrites the whole array: simpler than
+  // patching in place, and the store saves the whole file anyway.
+  _setLists(fn) {
+    this._update((ov) => { ov.checklists = fn((ov.checklists || []).map((l) => ({ ...l, items: l.items.map((i) => ({ ...i })) }))); });
+  }
+
+  addList(name) {
+    this._require();
+    if (this.checklists().length >= MAX_LISTS) throw new Error(`That's the limit of ${MAX_LISTS} checklists.`);
+    const list = { id: newId(), name: cleanText(name, 40) || `Checklist ${this.checklists().length + 1}`, items: [] };
+    this._setLists((ls) => [...ls, list]);
+    this._update((ov) => { ov.activeList = list.id; });
+    return list;
+  }
+
+  renameList(id, name) {
+    this._require();
+    this._list(id);
+    const n = cleanText(name, 40);
+    if (!n) throw new Error('Give the checklist a name.');
+    this._setLists((ls) => ls.map((l) => (l.id === id ? { ...l, name: n } : l)));
+    return true;
+  }
+
+  removeList(id) {
+    this._require();
+    this._list(id);
+    this._setLists((ls) => ls.filter((l) => l.id !== id));
+    this._update((ov) => { if (ov.activeList === id) ov.activeList = ov.checklists[0]?.id || null; });
+    return true;
+  }
+
+  setActiveList(id) {
+    this._require();
+    if (id) this._list(id);
+    this._update((ov) => { ov.activeList = id || null; });
+    return true;
+  }
+
+  addItem(listId, text) {
+    this._require();
+    const l = this._list(listId);
+    const t = cleanText(text, 80);
+    if (!t) throw new Error('Type something to add.');
+    if (l.items.length >= MAX_ITEMS) throw new Error(`That's the limit of ${MAX_ITEMS} items in one checklist.`);
+    const item = { id: newId(), text: t, done: false };
+    this._setLists((ls) => ls.map((x) => (x.id === listId ? { ...x, items: [...x.items, item] } : x)));
+    return item;
+  }
+
+  // done omitted: flip it (one tap on the phone or the overlay).
+  checkItem(listId, itemId, done) {
+    this._require();
+    const item = this._list(listId).items.find((i) => i.id === itemId);
+    if (!item) throw new Error('That item no longer exists.');
+    const next = done === undefined ? !item.done : Boolean(done);
+    this._setLists((ls) => ls.map((x) => (x.id === listId ? { ...x, items: x.items.map((i) => (i.id === itemId ? { ...i, done: next } : i)) } : x)));
+    return next;
+  }
+
+  removeItem(listId, itemId) {
+    this._require();
+    this._list(listId);
+    this._setLists((ls) => ls.map((x) => (x.id === listId ? { ...x, items: x.items.filter((i) => i.id !== itemId) } : x)));
+    return true;
+  }
+
+  // Untick everything, for a fresh run.
+  resetList(listId) {
+    this._require();
+    this._list(listId);
+    this._setLists((ls) => ls.map((x) => (x.id === listId ? { ...x, items: x.items.map((i) => ({ ...i, done: false })) } : x)));
+    return true;
+  }
+
   // ---------- teleport ----------
   // How this game can teleport right now: 'memory' (writing the position
   // mods), 'command' (the pack's teleport command), or null.
@@ -551,6 +672,13 @@ class OverlayModel {
       info: this.pack?.info || [],
       // Pinned mods for the overlay's Mods panel.
       mods: this._pinnedMods(),
+      checklists: this.checklists().map((l) => ({ id: l.id, name: l.name, total: l.items.length, done: l.items.filter((i) => i.done).length })),
+      checklist: this.activeList(),
+      timers: this.c.timers ? this.c.timers.list() : [],
+      crosshair: this.crosshair(),
+      pcstats: ov.pcstats,
+      // When the game started running (for "playing for"), or null.
+      since: this.game.since || null,
       notes: ov.notes,
       panels: ov.panels,
       zoom: ov.zoom,

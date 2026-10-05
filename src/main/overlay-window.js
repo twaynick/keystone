@@ -26,6 +26,8 @@ const HOTKEYS = {
 // Ctrl+Shift+F stays free for other programs the rest of the time.
 const FIND_ME = 'CommandOrControl+Shift+F';
 
+const { PcStats } = require('./pcstats');
+
 class OverlayWindow extends EventEmitter {
   constructor({ controller, settings, root }) {
     super();
@@ -113,6 +115,14 @@ class OverlayWindow extends EventEmitter {
   // Short message in the middle-bottom of the screen (hotkey results etc.).
   flash(text) {
     this._send('overlay:flash', text);
+  }
+
+  // A timer went off: flash plus a chime. Returns whether the overlay was on
+  // screen to play it, so the caller can let Windows make the sound instead.
+  alert(text) {
+    const showing = Boolean(this.win && this.win.isVisible());
+    this._send('overlay:alert', text);
+    return showing;
   }
 
   dropWaypoint() {
@@ -218,6 +228,9 @@ class OverlayWindow extends EventEmitter {
         nodeIntegration: false,
         sandbox: true,
         backgroundThrottling: false, // keep the minimap moving while the game has focus
+        // Timer chimes play without a click: the overlay never gets one
+        // outside edit mode.
+        autoplayPolicy: 'no-user-gesture-required',
       },
     });
     // 'screen-saver' is the highest z-level Electron offers; lower levels can
@@ -234,12 +247,21 @@ class OverlayWindow extends EventEmitter {
     this.win = win;
     this._registerHotkeys();
     this._fgTimer = setInterval(() => this._updateVisibility(), 500);
+    // PC stats once a second, only while that panel is switched on.
+    this.pc = new PcStats();
+    this._pcTimer = setInterval(() => {
+      const c = this.c;
+      if (!this.win || !c.game || !c.store.load(c.game.key).overlay.panels?.pcstats?.visible) return;
+      this._send('overlay:pc', this.pc.sample());
+    }, 1000);
     this._updateVisibility();
   }
 
   _close() {
     clearInterval(this._fgTimer);
     this._fgTimer = null;
+    clearInterval(this._pcTimer);
+    this._pcTimer = null;
     for (const accel of Object.values(HOTKEYS)) globalShortcut.unregister(accel);
     if (this._findMeOn) globalShortcut.unregister(FIND_ME);
     this._findMeOn = false;

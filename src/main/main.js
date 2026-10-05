@@ -10,6 +10,7 @@ const { OverlayWindow } = require('./overlay-window');
 const { createTray } = require('./tray');
 const { KeystoneBrowser } = require('./browser-window');
 const { ArtCache } = require('./art');
+const { Timers } = require('./timers');
 const { HotkeyRegistry } = require('./hotkeys');
 const { loadPacks } = require('./packs');
 
@@ -18,6 +19,7 @@ let controller = null; // created once app paths are ready (needs userData)
 let remote = null;
 let overlayWin = null;
 let settings = null;
+let timers = null;
 let tray = null;
 let browser = null;
 let art = null;
@@ -171,6 +173,10 @@ function createController() {
   controller.on('structure', () => send('commands:info', controller.commands.info()));
 
   settings = new Settings(app.getPath('userData'));
+  timers = new Timers({ settings });
+  controller.timers = timers;
+  // The overlay, the desktop and the phone all redraw from 'overlay' events.
+  timers.on('change', () => controller.emit('overlay'));
   remote = new Remote({
     controller,
     settings,
@@ -186,6 +192,16 @@ function createController() {
   controller.on('structure', () => send('overlay:data', controller.overlay.state()));
   controller.on('values', () => send('overlay:live', controller.overlay.values()));
   overlayWin.init();
+
+  // A timer ran out: flash and beep in the overlay, toast on a connected
+  // phone, and a Windows notification, which makes its own sound only when
+  // the overlay couldn't beep (hidden, or turned off).
+  timers.on('done', (t) => {
+    const text = t.repeat ? `${t.name}: time's up (starting again)` : `${t.name}: time's up`;
+    const beeped = overlayWin.alert(text);
+    remote.server.broadcast({ type: 'alert', text });
+    if (Notification.isSupported()) new Notification({ title: 'Keystone', body: text, silent: beeped }).show();
+  });
 
   // Mod hotkeys: registered while the open game has mods connected, and
   // re-synced on every change. Each press flashes the result in the overlay.
@@ -308,6 +324,23 @@ handle('overlay:removeWaypoint', (id) => ov().removeWaypoint(id));
 handle('overlay:setTracked', (id) => ov().setTracked(id));
 handle('overlay:teleport', (target) => ov().teleport(target));
 handle('overlay:setVariant', (id) => ov().setVariant(String(id)));
+handle('overlay:setCrosshair', (patch) => ov().setCrosshair(patch || {}));
+handle('overlay:setPcStats', (patch) => ov().setPcStats(patch || {}));
+handle('timers:add', (t) => timers.add(t || {}));
+handle('timers:update', (id, patch) => timers.update(String(id), patch || {}));
+handle('timers:start', (id) => timers.start(String(id)));
+handle('timers:pause', (id) => timers.pause(String(id)));
+handle('timers:toggle', (id) => timers.toggle(String(id)));
+handle('timers:reset', (id) => timers.reset(String(id)));
+handle('timers:remove', (id) => timers.remove(String(id)));
+handle('list:add', (name) => ov().addList(name));
+handle('list:rename', (id, name) => ov().renameList(String(id), name));
+handle('list:remove', (id) => ov().removeList(String(id)));
+handle('list:active', (id) => ov().setActiveList(id ? String(id) : null));
+handle('list:addItem', (id, text) => ov().addItem(String(id), text));
+handle('list:check', (id, itemId, done) => ov().checkItem(String(id), String(itemId), done));
+handle('list:removeItem', (id, itemId) => ov().removeItem(String(id), String(itemId)));
+handle('list:reset', (id) => ov().resetList(String(id)));
 handle('overlay:setLayer', (id, on) => ov().setLayer(String(id), on));
 handle('overlay:setHere', (pos) => ov().setHere(pos));
 handle('overlay:clearHere', () => ov().clearHere());
@@ -434,6 +467,7 @@ app.on('before-quit', () => { quitting = true; browser?.shutdown(); hotkeyReg?.c
 
 app.on('window-all-closed', async () => {
   overlayWin?.shutdown();
+  timers?.shutdown();
   controller?.shutdown();
   await remote?.shutdown();
   tray?.destroy();

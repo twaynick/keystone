@@ -22,6 +22,10 @@ contextBridge.exposeInMainWorld('overlayApi', {
   setTracked: (id) => invoke('overlay:setTracked', id),
   teleportTo: (pos) => invoke('overlay:teleportTo', pos),
   setHere: (pos) => invoke('overlay:setHere', pos),
+  toggleTimer: (id) => invoke('timers:toggle', id),
+  checkListItem: (id, itemId) => invoke('list:check', id, itemId),
+  onAlert: (cb) => on('overlay:alert', cb),
+  onPc: (cb) => on('overlay:pc', cb),
   setZoom: (z) => invoke('overlay:setZoom', z),
   finishEditing: () => invoke('overlay:edit', false),
 });

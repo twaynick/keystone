@@ -50,7 +50,8 @@ function connect() {
   ws.onmessage = (e) => {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
-    if (msg.type === 'snapshot') { app.snapshot = msg.data; render(); }
+    if (msg.type === 'snapshot') { app.snapshot = msg.data; app.snapAt = Date.now(); render(); }
+    else if (msg.type === 'alert') toast(msg.text);
     else if (msg.type === 'values') patchValues(msg.data);
     else if (msg.type === 'result') settle(msg);
     else if (msg.type === 'appearance' && window.KeystoneTheme) KeystoneTheme.applyAccent(msg.data.accent);
@@ -144,14 +145,16 @@ function render() {
     closeSheet();
     return show('idle');
   }
-  $('game').textContent = s.game.name === 'demo.exe' ? 'Demo game' : s.game.name.replace(/\.exe$/i, '');
+  $('game').textContent = s.displayName || (s.game.name === 'demo.exe' ? 'Demo game' : s.game.name.replace(/\.exe$/i, ''));
   // Teleport can work without mods (games with a teleport command), so a
   // game with waypoints still gets a screen.
   const tp = s.teleport && s.teleport.waypoints.length ? s.teleport : null;
-  if (!s.records.length && !tp) return show('noMods');
+  if (!s.records.length && !tp && !(s.timers || []).length && !s.checklist) return show('noMods');
   show('mods');
   renderProfiles();
   renderList();
+  renderTimers(s.timers || []);
+  renderChecklist(s.checklist);
   renderTeleport(tp);
   if (app.sheetId) fillSheet();
 }
@@ -221,6 +224,57 @@ function renderList() {
     paintValue(r.id, r);
     list.append(row);
   }
+}
+
+// Timers count down from what the PC reported, using this phone's own clock
+// for the time since: phone and PC clocks can disagree by seconds or more.
+function fmtLeft(ms) {
+  const t = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = String(t % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
+const timerEls = new Map();
+function renderTimers(timers) {
+  $('timersSec').hidden = !timers.length;
+  timerEls.clear();
+  $('timerRows').replaceChildren(...timers.map((t) => {
+    const left = el('span', { class: 'row-value' });
+    const btn = el('button', { class: `btn ${t.state === 'running' ? '' : 'primary '}apply-btn`, text: t.state === 'running' ? 'Pause' : t.state === 'done' ? 'Again' : 'Start' });
+    btn.addEventListener('click', async () => {
+      try {
+        if (t.state === 'done') await send({ type: 'timer', action: 'reset', id: t.id });
+        await send({ type: 'timer', action: 'toggle', id: t.id });
+      } catch { /* toast already shown */ }
+    });
+    timerEls.set(t.id, { left, t });
+    return el('div', { class: `row timer ${t.state}` }, el('div', { class: 'row-main' }, el('span', { class: 'row-name', text: t.name }), left), btn);
+  }));
+  paintTimers();
+}
+
+function paintTimers() {
+  const since = Date.now() - (app.snapAt || Date.now());
+  for (const { left, t } of timerEls.values()) {
+    left.textContent = t.state === 'done' ? 'Done' : fmtLeft(t.state === 'running' ? t.remainingMs - since : t.remainingMs);
+  }
+}
+setInterval(paintTimers, 500);
+
+function renderChecklist(list) {
+  $('listSec').hidden = !list;
+  if (!list) return;
+  $('listName').textContent = `${list.name}  ${list.items.filter((i) => i.done).length}/${list.items.length}`;
+  $('listRows').replaceChildren(...list.items.map((i) => {
+    const cb = el('input', { type: 'checkbox', 'aria-label': i.text });
+    cb.checked = i.done;
+    cb.addEventListener('change', async () => {
+      try { await send({ type: 'check', listId: list.id, itemId: i.id }); } catch { cb.checked = !cb.checked; }
+    });
+    return el('label', { class: `row check-row${i.done ? ' done' : ''}` }, cb, el('span', { class: 'row-name', text: i.text }));
+  }));
 }
 
 function renderTeleport(tp) {

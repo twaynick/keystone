@@ -43,15 +43,33 @@
     <ul class="omods" id="omods"></ul>
   </section>
 
+  <section class="panel timers-panel" id="panel-timers" data-panel="timers" hidden>
+    <header class="panel-head"><span>Timers</span></header>
+    <ul class="otimers" id="otimers"></ul>
+  </section>
+
+  <section class="panel list-panel" id="panel-checklist" data-panel="checklist" hidden>
+    <header class="panel-head"><span id="listTitle">Checklist</span><span class="list-count" id="listCount"></span></header>
+    <ul class="olist" id="olist"></ul>
+  </section>
+
   <section class="panel info-panel" id="panel-info" data-panel="info" hidden>
     <header class="panel-head"><span id="infoTitle">Info</span></header>
     <div class="info-body" id="info"></div>
   </section>
 
+  <section class="panel pc-panel" id="panel-pcstats" data-panel="pcstats" hidden>
+    <header class="panel-head"><span>PC</span></header>
+    <ul class="readouts pcstats" id="pcstats"></ul>
+  </section>
+
+  <canvas class="crosshair" id="crosshair" hidden></canvas>
+
   <div class="flash" id="flash" hidden></div>
 
   <script src="../shared/theme.js"></script>
   <script src="../shared/map-math.js"></script>
+  <script src="../shared/crosshair.js"></script>
   <script src="overlay.js"></script>
 </body>
 </html>

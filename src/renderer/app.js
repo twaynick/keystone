@@ -1,6 +1,6 @@
 'use strict';
 
-/* global keystone, MapMath, KeystoneTheme */
+/* global keystone, MapMath, KeystoneTheme, Crosshair */
 
 const $ = (id) => document.getElementById(id);
 
@@ -882,7 +882,161 @@ function renderOverlayData() {
   }) : [el('p', { class: 'block-note', text: 'Load a cheat table to pick stats.' })]));
 
   if (document.activeElement !== $('ovNotes')) $('ovNotes').value = d.notes || '';
+  renderTimerList(d);
+  renderLists(d);
+  renderCrosshairBlock(d);
+  for (const cb of document.querySelectorAll('[data-pc]')) cb.checked = Boolean(d.pcstats?.[cb.dataset.pc]);
+  $('pcPicks').hidden = !d.panels.pcstats?.visible;
   paintOverlayLive();
+}
+
+// ---------- crosshair ----------
+const XH_SWATCHES = [['accent', 'Accent colour'], ['white', 'White'], ['green', 'Green'], ['red', 'Red'], ['cyan', 'Cyan'], ['yellow', 'Yellow']];
+
+// Edits show in the preview straight away and are saved a moment after the
+// slider stops, so dragging doesn't write the settings file 60 times a second.
+let xhDraft = null;
+let xhSaveTimer = null;
+function xhEdit(patch) {
+  xhDraft = Crosshair.normalize({ ...(xhDraft || state.ovData.crosshair), ...patch });
+  drawCrosshairPreview(xhDraft);
+  paintCrosshairControls(xhDraft);
+  clearTimeout(xhSaveTimer);
+  xhSaveTimer = setTimeout(async () => {
+    const saved = await call(keystone.setCrosshair(xhDraft));
+    if (saved) xhDraft = null;
+  }, 150);
+}
+
+function accentColor() {
+  return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+}
+
+function drawCrosshairPreview(c) {
+  const cv = $('xhPreview');
+  const dpr = window.devicePixelRatio || 1;
+  if (cv.width !== 240 * dpr) { cv.width = 240 * dpr; cv.height = 180 * dpr; }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, 240, 180);
+  // The preview shows the shape even when it's switched off, dimmed.
+  Crosshair.draw(ctx, c.on ? c : { ...c, opacity: c.opacity * 0.35 }, 120, 90, accentColor());
+}
+
+function paintCrosshairControls(c) {
+  $('xhOn').checked = c.on;
+  for (const b of $('xhStyle').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === c.style));
+  for (const input of document.querySelectorAll('input.slider[data-xh]')) {
+    if (document.activeElement !== input) input.value = String(c[input.dataset.xh]);
+    const k = input.dataset.xh;
+    input.style.setProperty('--fill', `${((c[k] - Number(input.min)) / (Number(input.max) - Number(input.min))) * 100}%`);
+    input.nextElementSibling.textContent = k === 'opacity' ? `${Math.round(c[k] * 100)}%` : `${c[k]}px`;
+  }
+  for (const input of document.querySelectorAll('input.xh-num')) if (document.activeElement !== input) input.value = String(c[input.dataset.xh]);
+  $('xhOutline').checked = c.outline;
+  for (const b of $('xhColors').querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.c === c.color));
+}
+
+function renderCrosshairBlock(d) {
+  const colors = $('xhColors');
+  if (!colors.children.length) {
+    colors.replaceChildren(...XH_SWATCHES.map(([id, label]) => {
+      const b = el('button', { role: 'radio', 'data-c': id, title: label, 'aria-label': label });
+      b.style.background = id === 'accent' ? 'var(--accent)' : Crosshair.COLORS[id];
+      b.addEventListener('click', () => xhEdit({ color: id }));
+      return b;
+    }));
+  }
+  const c = xhDraft || d.crosshair;
+  if (!c) return;
+  drawCrosshairPreview(c);
+  paintCrosshairControls(c);
+}
+
+// ---------- timers ----------
+function fmtLeft(ms) {
+  const t = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = String(t % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
+function renderTimerList(d) {
+  const list = $('timerList');
+  const timers = d.timers || [];
+  if (!timers.length) { list.replaceChildren(el('p', { class: 'wp-empty', text: 'No timers yet.' })); return; }
+  list.replaceChildren(...timers.map((t) => {
+    const run = el('button', { class: `btn small${t.state === 'running' ? '' : ' primary'}`, text: t.state === 'running' ? 'Pause' : t.state === 'paused' ? 'Resume' : 'Start' });
+    run.addEventListener('click', () => call(keystone.toggleTimer(t.id)));
+    const reset = el('button', { class: 'btn small ghost', text: 'Reset' });
+    reset.disabled = t.state === 'idle';
+    reset.addEventListener('click', () => call(keystone.resetTimer(t.id)));
+    const del = el('button', { class: 'btn small ghost', text: 'Delete' });
+    del.addEventListener('click', () => call(keystone.removeTimer(t.id)));
+    const name = el('span', { class: 't-name', text: t.name, title: `${fmtLeft(t.durationMs)}${t.repeat ? ', repeats' : ''}` });
+    name.append(el('small', { text: `${fmtLeft(t.durationMs)}${t.repeat ? ' \u21bb' : ''}` }));
+    return el('div', { class: `timer-row ${t.state}`, 'data-id': t.id }, name, el('span', { class: 't-left' }), run, reset, del);
+  }));
+  paintTimerList();
+}
+
+// Counts down from the end times locally; the main process only sends a
+// new list when something changes.
+function paintTimerList() {
+  const now = Date.now();
+  for (const t of state.ovData.timers || []) {
+    const row = document.querySelector(`.timer-row[data-id="${CSS.escape(t.id)}"] .t-left`);
+    if (row) row.textContent = t.state === 'done' ? 'Done' : fmtLeft(t.state === 'running' ? t.endsAt - now : t.remainingMs);
+  }
+}
+
+// ---------- checklists ----------
+function renderLists(d) {
+  const body = $('listBody');
+  // Don't rebuild under the cursor: typing an item or a new name would be lost.
+  if (body.contains(document.activeElement) && document.activeElement.tagName === 'INPUT' && document.activeElement.type === 'text') return;
+  const lists = d.checklists || [];
+  const cur = d.checklist;
+  const tabs = $('listTabs');
+  tabs.hidden = !lists.length;
+  tabs.replaceChildren(...lists.map((l) => {
+    const b = el('button', { role: 'tab', 'aria-pressed': String(cur?.id === l.id) }, el('span', { text: l.name }), el('span', { class: 'n', text: ` ${l.done}/${l.total}` }));
+    b.addEventListener('click', () => call(keystone.setActiveList(l.id)));
+    return b;
+  }));
+  if (!cur) { body.replaceChildren(el('p', { class: 'wp-empty', text: 'No checklists yet.' })); return; }
+
+  const name = el('input', { class: 'field', type: 'text', value: cur.name, maxlength: '40', 'aria-label': 'Checklist name' });
+  name.addEventListener('change', () => call(keystone.renameList(cur.id, name.value)));
+  const untick = el('button', { class: 'btn small ghost', text: 'Untick all' });
+  untick.disabled = !cur.items.some((i) => i.done);
+  untick.addEventListener('click', () => call(keystone.resetList(cur.id)));
+  const del = el('button', { class: 'btn small ghost', text: 'Delete checklist' });
+  del.addEventListener('click', async () => {
+    if (await confirmBox(`Delete the checklist "${cur.name}"?`, 'Delete')) call(keystone.removeList(cur.id));
+  });
+
+  const items = el('ul', { class: 'list-items' }, ...cur.items.map((i) => {
+    const cb = el('input', { type: 'checkbox', 'aria-label': i.text });
+    cb.checked = i.done;
+    cb.addEventListener('change', () => call(keystone.checkListItem(cur.id, i.id, cb.checked)));
+    const x = el('button', { class: 'btn small ghost x', text: 'Remove', 'aria-label': `Remove ${i.text}` });
+    x.addEventListener('click', () => call(keystone.removeListItem(cur.id, i.id)));
+    return el('li', { class: i.done ? 'done' : '' }, el('label', { class: 'check' }, cb), el('span', { class: 'text', text: i.text }), x);
+  }));
+
+  const input = el('input', { class: 'field', type: 'text', placeholder: 'Add an item', maxlength: '80', 'aria-label': 'New item' });
+  const add = el('button', { class: 'btn small', type: 'submit', text: 'Add' });
+  const form = el('form', { class: 'list-add' }, input, add);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = input.value;
+    input.value = '';
+    if (text.trim()) await call(keystone.addListItem(cur.id, text));
+    input.focus();
+  });
+  body.replaceChildren(el('div', { class: 'list-head' }, name, untick, del), items, form);
 }
 
 // Live position from mods, else the "I'm here" marker.
@@ -1153,6 +1307,22 @@ function wireOverlay() {
   });
 
   $('variantSel').addEventListener('change', (e) => call(keystone.setMapVariant(e.target.value)));
+  $('xhOn').addEventListener('change', (e) => xhEdit({ on: e.target.checked }));
+  for (const b of $('xhStyle').querySelectorAll('button')) b.addEventListener('click', () => xhEdit({ style: b.dataset.v }));
+  for (const input of document.querySelectorAll('input.slider[data-xh]')) input.addEventListener('input', () => xhEdit({ [input.dataset.xh]: Number(input.value) }));
+  for (const input of document.querySelectorAll('input.xh-num')) input.addEventListener('change', () => xhEdit({ [input.dataset.xh]: Number(input.value) || 0 }));
+  $('xhOutline').addEventListener('change', (e) => xhEdit({ outline: e.target.checked }));
+  for (const cb of document.querySelectorAll('[data-pc]')) cb.addEventListener('change', () => call(keystone.setPcStats({ [cb.dataset.pc]: cb.checked })));
+  $('timerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const t = await call(keystone.addTimer({ name: $('timerName').value, duration: $('timerLen').value, repeat: $('timerRepeat').checked }));
+    if (t) { $('timerName').value = ''; $('timerLen').value = ''; $('timerRepeat').checked = false; toast(`Added ${t.name}. Press Start when you're ready.`); }
+  });
+  $('listNew').addEventListener('click', async () => {
+    const name = await askName({ title: 'New checklist', confirm: 'Create' });
+    if (name) call(keystone.addList(name));
+  });
+  setInterval(() => { if (isPane('overlay') && !document.hidden) paintTimerList(); }, 500);
   $('hereBtn').addEventListener('click', () => {
     if (!state.ovData.map?.bounds) { toast('This map isn\u2019t lined up yet, so Keystone can\u2019t tell where a click is. Line up the map first.', 'error'); return; }
     setPlacing(!state.placing);
