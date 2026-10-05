@@ -6,12 +6,15 @@ const path = require('path');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const { WebSocketServer } = require('ws');
+const { mimeOf } = require('../library-images');
 
 // Phone remote: a small web server on the home network.
 //
 //   GET /            the phone web app (static files, no secrets in them)
 //   GET /shared/...  shared CSS and fonts
 //   WS  /ws?t=TOKEN  live state + commands; the token is the only gate
+//   GET /api/map-image   the current map picture; token in X-Keystone-Token
+//   GET /api/lib-image   a Library picture (?kind=thumb|hero|spawn|spawnmap&c=&id=&i=)
 //
 // The token comes from the pairing QR code. It travels in the URL fragment
 // (#t=...) on the page, which browsers never send to the server, and only goes
@@ -49,7 +52,8 @@ class RemoteServer extends EventEmitter {
     this._structureTimer = null;
 
     this._onStructure = () => this._scheduleSnapshot();
-    this._onValues = (v) => this._broadcast({ type: 'values', data: v });
+    // Live position rides with the values, for the phone's map.
+    this._onValues = (v) => this._broadcast({ type: 'values', data: v, pos: this.controller.overlay?.livePosition() || null });
   }
 
   get clientCount() {
@@ -130,6 +134,7 @@ class RemoteServer extends EventEmitter {
       res.writeHead(400).end();
       return;
     }
+    if (urlPath.startsWith('/api/')) return this._api(req, res, urlPath);
     let root = this.webDir;
     let rel = urlPath === '/' ? 'index.html' : urlPath.slice(1);
     if (rel.startsWith('shared/')) {
@@ -156,6 +161,60 @@ class RemoteServer extends EventEmitter {
       });
       res.end(req.method === 'HEAD' ? undefined : body);
     });
+  }
+
+  // The map picture is too big for the socket (megabytes), so it's a GET.
+  // The token goes in a header, never the URL, so it can't end up in the
+  // phone's history; same lockout as the socket for wrong guesses.
+  _api(req, res, urlPath) {
+    const ip = req.socket.remoteAddress || 'unknown';
+    if (this._isBlocked(ip)) return res.writeHead(429).end();
+    if (!tokenMatches(req.headers['x-keystone-token'] || '', this.getToken())) {
+      this._recordFail(ip);
+      return res.writeHead(401).end();
+    }
+    if (urlPath === '/api/lib-image') return this._libImage(req, res);
+    if (urlPath !== '/api/map-image') return res.writeHead(404).end();
+    const img = this.controller.overlay?.phoneMapImage();
+    if (!img) return res.writeHead(404).end();
+    fs.readFile(img.file, (err, body) => {
+      if (err) return res.writeHead(404).end();
+      res.writeHead(200, {
+        'Content-Type': img.type,
+        // The phone asks with ?k=<key>, which changes with the picture, so a
+        // cached copy is always the right one.
+        'Cache-Control': 'private, max-age=86400',
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'no-referrer',
+      });
+      return res.end(req.method === 'HEAD' ? undefined : body);
+    });
+    return undefined;
+  }
+
+  // Library pictures, the same ones the desktop shows (downloaded from the
+  // wiki by the PC and cached there; the phone never talks to the wiki).
+  async _libImage(req, res) {
+    const q = new URL(req.url, 'http://x').searchParams;
+    const lib = this.controller.library;
+    const kind = q.get('kind');
+    const catalog = String(q.get('c') || '');
+    const id = String(q.get('id') || '');
+    let file = null;
+    try {
+      if (kind === 'thumb' || kind === 'hero') file = await lib.pictureFile(kind, catalog, id);
+      else if (kind === 'spawn' || kind === 'spawnmap') file = await lib.spawnFile(kind === 'spawn' ? 'overlay' : 'map', Number(q.get('i')), catalog, id);
+    } catch { file = null; }
+    if (!file) return res.writeHead(404).end();
+    let body;
+    try { body = await fs.promises.readFile(file); } catch { return res.writeHead(404).end(); }
+    res.writeHead(200, {
+      'Content-Type': mimeOf(body),
+      'Cache-Control': 'private, max-age=86400',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
+    });
+    return res.end(req.method === 'HEAD' ? undefined : body);
   }
 
   // ---------- WebSocket ----------
@@ -211,16 +270,93 @@ class RemoteServer extends EventEmitter {
           if (!fn) return reply(false, { error: 'Unknown timer action.' });
           return reply(true, { data: t[fn](String(msg.id)) });
         }
+        case 'timerPreset': {
+          const p = c.pack?.timerPresets?.[Number(msg.index)];
+          if (!p || !c.timers) return reply(false, { error: 'That timer isn\u2019t in this game\u2019s list.' });
+          return reply(true, { data: c.timers.startPreset(p) });
+        }
         case 'check': return reply(true, { data: c.overlay.checkItem(String(msg.listId), String(msg.itemId)) });
+        // Picks the list shown on the phone and in the overlay (one shared choice).
+        case 'setActiveList': c.overlay.setActiveList(String(msg.id)); return reply(true);
+        case 'identify':
+          if (msg.action === 'cycle') { c.identify.cycle(String(msg.trait)); return reply(true); }
+          if (msg.action === 'given') { c.identify.setGiven(msg.value); return reply(true); }
+          if (msg.action === 'reset') { c.identify.reset(); return reply(true); }
+          return reply(false, { error: 'Unknown identifier action.' });
         case 'teleport':
           c.overlay.teleport({ waypointId: String(msg.waypointId) })
             .then((r) => reply(true, { data: { name: r.name } }), (err) => reply(false, { error: err.message }));
           return undefined;
+        // ----- map -----
+        case 'mapPoints': return reply(true, { data: c.overlay.phoneMapPoints() });
+        case 'setVariant': c.overlay.setVariant(String(msg.id)); return reply(true);
+        case 'setLayer': c.overlay.setLayer(String(msg.id), Boolean(msg.on)); return reply(true);
+        case 'setHere': return reply(true, { data: c.overlay.setHere({ x: msg.x, y: msg.y }) });
+        case 'clearHere': c.overlay.clearHere(); return reply(true);
+        case 'addWaypoint': return reply(true, { data: c.overlay.addWaypoint({ name: msg.name, x: msg.x, y: msg.y }) });
+        case 'removeWaypoint': c.overlay.removeWaypoint(String(msg.id)); return reply(true);
+        case 'setTracked': c.overlay.setTracked(msg.id ? String(msg.id) : null); return reply(true);
+        case 'teleportTo':
+          c.overlay.teleport({ x: msg.x, y: msg.y })
+            .then((r) => reply(true, { data: { x: r.x, y: r.y } }), (err) => reply(false, { error: err.message }));
+          return undefined;
+        case 'findMe':
+          c.overlay.findMe()
+            .then((h) => reply(true, { data: { x: h.x, y: h.y } }), (err) => reply(false, { error: err.message }));
+          return undefined;
+        // ----- commands (admin/console) -----
+        case 'cmdInfo': return reply(true, { data: this._cmdInfo() });
+        case 'cmdRun':
+        case 'cmdRaw':
+        case 'cmdAdmin': {
+          const cm = c.commands;
+          const p = msg.type === 'cmdRun'
+            ? cm.run(msg.kind === 'quick' ? 'quick' : 'action', String(msg.id), { entryId: msg.entryId == null ? null : String(msg.entryId), values: msg.values && typeof msg.values === 'object' ? msg.values : {} })
+            : msg.type === 'cmdRaw' ? cm.runRaw(msg.text, msg.via) : cm.enableAdmin().then(() => ({ via: 'console', output: null }));
+          p.then((r) => reply(true, { data: { via: r.via, output: r.output || null } }), (err) => reply(false, { error: err.message }));
+          return undefined;
+        }
+        // ----- library -----
+        case 'lib': return reply(true, { data: this._lib(msg) });
         case 'ping': return reply(true);
         default: return reply(false, { error: `Unknown command "${msg.type}"` });
       }
     } catch (err) {
       return reply(false, { error: err.message });
+    }
+  }
+
+  // What the phone needs to draw the commands: no history, no RCON address,
+  // and never the admin password (only whether one is saved).
+  _cmdInfo() {
+    const info = this.controller.commands.info();
+    if (!info.available) return { available: false, reason: info.reason };
+    const s = info.settings;
+    return {
+      available: true,
+      actions: info.actions,
+      quick: info.quick,
+      canEnable: s.canEnable,
+      hasAdminPassword: s.hasAdminPassword,
+      rcon: s.rconSupported && Boolean(s.rcon.host && s.rcon.hasPassword),
+      credits: info.credits,
+    };
+  }
+
+  _lib(msg) {
+    const lib = this.controller.library;
+    switch (msg.action) {
+      case 'info': {
+        const { userGuidesDir, ...info } = lib.info();
+        return info;
+      }
+      // Just what a list row needs: catalogs run to hundreds of entries.
+      case 'entries': return lib.entries(String(msg.catalog)).map((e) => ({ id: e.id, name: e.name, category: e.category || null, map: e.map || null }));
+      case 'entry': return lib.entry(String(msg.catalog), String(msg.id));
+      case 'guide': return lib.guide(String(msg.id));
+      case 'search': return lib.search(String(msg.q || ''));
+      case 'note': return lib.setNote(String(msg.catalog), String(msg.id), msg.text);
+      default: throw new Error('Unknown Library request.');
     }
   }
 

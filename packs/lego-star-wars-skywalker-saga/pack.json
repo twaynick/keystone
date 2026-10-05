@@ -1,0 +1,81 @@
+{
+  "name": "LEGO Star Wars: The Skywalker Saga",
+  "exe": [
+    "LEGOSTARWARSSKYWALKERSAGA_DX11.exe"
+  ],
+  "art": {
+    "steamAppId": 920210
+  },
+  "info": [
+    {
+      "title": "Codes",
+      "body": "Pause the game, open Extras (the key and plus symbol), choose Enter Code, and type the code. The character or ship is then yours."
+    },
+    {
+      "title": "Copying codes",
+      "body": "Codes have to be typed in the game's code screen. Every code in the Library has a Copy button and big, easy-to-read letters."
+    }
+  ],
+  "library": {
+    "catalogs": {
+      "codes": "codes.json"
+    },
+    "sections": [
+      {
+        "id": "codes",
+        "label": "Codes",
+        "catalog": "codes",
+        "idLabel": "Code"
+      }
+    ],
+    "guides": "guides",
+    "links": [
+      {
+        "label": "LEGO Star Wars Wiki",
+        "url": "https://legostarwars.fandom.com/wiki/LEGO_Star_Wars:_The_Skywalker_Saga"
+      }
+    ],
+    "images": {
+      "api": "https://lego.fandom.com/api.php",
+      "credit": "Pictures from Brickipedia, the LEGO Wiki on Fandom",
+      "creditUrl": "https://lego.fandom.com/",
+      "catalogs": {
+        "codes": {
+          "thumb": [
+            "{name}"
+          ],
+          "hero": [
+            "{name}"
+          ]
+        }
+      }
+    }
+  },
+  "checklists": [
+    {
+      "name": "Codes entered",
+      "items": [
+        "Aayla Secura (KH7P320)",
+        "Admiral Holdo (XV4WND9)",
+        "C-3PO (Holiday Special) (C3PHOHO)",
+        "Chewbacca (Holiday Special) (WOOKIEE)",
+        "D-O (Holiday Special) (TIPYIPS)",
+        "Darth Vader (Holiday Special) (WROSHYR)",
+        "Dengar (OKV7TLR)",
+        "Gonk Droid (Holiday Special) (LIFEDAY)",
+        "Grand Moff Tarkin (3FCPPVX)",
+        "Mister Bones (BAC1CKP)",
+        "Nute Gunray (WBFE4GO)",
+        "Poe Dameron (Holiday Special) (KORDOKU)",
+        "Poggle the Lesser (Z55T8CQ)",
+        "Ratts Tyerell (GR2VBXF)",
+        "Shaak Ti (VT1LFNH)",
+        "Shmi Skywalker (T9LM1QF)",
+        "Temmin \"Snap\" Wexley (SKYSAGA)",
+        "The Emperor (SIDIOUS)",
+        "Razor Crest (ARVALA7)",
+        "Resistance I-TS Transport (SHUTTLE)"
+      ]
+    }
+  ]
+}

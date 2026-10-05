@@ -1,0 +1,88 @@
+{
+  "name": "Forza Horizon 4",
+  "exe": [
+    "ForzaHorizon4.exe"
+  ],
+  "art": {
+    "steamAppId": 1293830
+  },
+  "offlineOnly": true,
+  "offlineNote": "Forza Horizon 4 saves your progress to your Xbox profile and syncs it whenever you're online, so anything a mod changes (credits, cars, XP, Wheelspins) goes with you into online play, including if you modded in Solo or offline. Playground Games bans accounts it finds cheating. Use mods only playing offline, and only on progress you're prepared to lose.",
+  "info": [
+    {
+      "title": "Library",
+      "body": "Every car in Forza Horizon 4 (751) by make, with its class, value, how to get it and stats, pictures, and links to the Forza Wiki."
+    },
+    {
+      "title": "Overlay",
+      "body": "Set Display mode to Windowed or Borderless (Video options) for the overlay and Keystone's browser to show on top."
+    }
+  ],
+  "library": {
+    "catalogs": {
+      "cars": "cars.json"
+    },
+    "sections": [
+      {
+        "id": "cars",
+        "label": "Cars",
+        "catalog": "cars",
+        "idLabel": "ID"
+      }
+    ],
+    "guides": "guides",
+    "wiki": {
+      "label": "Forza Wiki",
+      "base": "https://forza.fandom.com"
+    },
+    "links": [
+      {
+        "label": "Forza Wiki",
+        "url": "https://forza.fandom.com/wiki/Forza_Horizon_4"
+      },
+      {
+        "label": "All cars (Forza Wiki)",
+        "url": "https://forza.fandom.com/wiki/Forza_Horizon_4/Cars"
+      }
+    ],
+    "images": {
+      "api": "https://forza.fandom.com/api.php",
+      "credit": "Pictures from the Forza Wiki on Fandom",
+      "creditUrl": "https://forza.fandom.com/",
+      "catalogs": {
+        "cars": {
+          "thumb": [
+            "File:{img}",
+            "{page}"
+          ],
+          "hero": [
+            "File:{img}",
+            "{page}"
+          ]
+        }
+      }
+    }
+  },
+  "checklists": [
+    {
+      "name": "Barn Finds",
+      "items": [
+        "1960 Aston Martin DB4 GT Zagato",
+        "1983 Audi Sport quattro",
+        "1931 Bentley 4-1/2 Liter Supercharged",
+        "1964 Ford GT40 Mk I",
+        "1986 Ford Escort RS Turbo",
+        "1961 Jaguar E-type S1",
+        "1993 Jaguar XJ220",
+        "1973 Land Rover Range Rover",
+        "1997 Lotus Elise GT1",
+        "1965 MG MGB GT",
+        "1965 MINI Cooper S",
+        "1962 Peel P50",
+        "1998 SUBARU Impreza 22B STi",
+        "1962 Triumph Spitfire",
+        "1998 TVR Cerbera Speed 12"
+      ]
+    }
+  ]
+}

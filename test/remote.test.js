@@ -21,9 +21,9 @@ const tmpDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'keystone-remote-'));
 const cleanups = [];
 test.after(async () => { for (const fn of cleanups.reverse()) await fn(); });
 
-async function setup() {
+async function setup(opts = {}) {
   const dataDir = tmpDir();
-  const controller = new Controller({ packsDir: path.join(ROOT, 'packs'), dataDir });
+  const controller = new Controller({ packsDir: path.join(ROOT, 'packs'), dataDir, ...opts });
   const settings = new Settings(dataDir);
   settings.updateRemote({ port: 0 }); // any free port
   const remote = new Remote({
@@ -203,4 +203,221 @@ test('LAN address ranking puts virtual adapters last', () => {
   const list = lanAddresses();
   const firstVirtual = list.findIndex((a) => a.virtual);
   if (firstVirtual >= 0) assert.ok(list.slice(firstVirtual).every((a) => a.virtual));
+});
+
+function getWithToken(port, urlPath, token) {
+  return new Promise((resolve, reject) => {
+    const headers = token === undefined ? {} : { 'X-Keystone-Token': token };
+    const req = http.request({ host: '127.0.0.1', port, path: urlPath, method: 'GET', headers }, (res) => {
+      const chunks = [];
+      res.on('data', (d) => chunks.push(d));
+      res.on('end', () => resolve({ status: res.statusCode, type: res.headers['content-type'], body: Buffer.concat(chunks) }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+test('phone map: snapshot, marker points, layers, waypoints and "I\'m here"', async () => {
+  const { controller, remote, port, settings } = await setup();
+  controller.listProcesses = () => [];
+  controller.attach({ packId: 'ark-survival-ascended' });
+  const ws = connect(port, settings.remote.token);
+  const snap = await waitFor(ws, (m) => m.type === 'snapshot');
+  const map = snap.data.map;
+  assert.equal(map.variant.units, 'latlon');
+  assert.ok(map.variants.length > 1, 'ARK has several maps');
+  assert.ok(map.layers.length && map.layers.every((l) => !('points' in l)), 'points stay out of the snapshot');
+  assert.equal(map.findMe, true);
+
+  let n = 0;
+  const ask = async (msg) => {
+    const reqId = ++n + 100;
+    ws.send(JSON.stringify({ ...msg, reqId }));
+    return waitFor(ws, (m) => m.type === 'result' && m.reqId === reqId);
+  };
+  const pts = await ask({ type: 'mapPoints' });
+  assert.equal(pts.data.variant, map.variant.id);
+  const caves = pts.data.layers.find((l) => l.id === map.layers[0].id);
+  assert.equal(caves.points.length, map.layers[0].count);
+  assert.ok(caves.points.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)));
+
+  assert.equal((await ask({ type: 'setLayer', id: map.layers[0].id, on: false })).ok, true);
+  const added = await ask({ type: 'addWaypoint', name: 'Phone pin', x: 40.5, y: 60.25 });
+  assert.equal(added.data.name, 'Phone pin');
+  assert.equal((await ask({ type: 'setTracked', id: added.data.id })).ok, true);
+  assert.equal((await ask({ type: 'setHere', x: 50, y: 50 })).ok, true);
+  const after = await waitFor(ws, (m) => m.type === 'snapshot' && m.data.map.here && m.data.map.tracked === added.data.id);
+  assert.equal(after.data.map.layers[0].on, false, 'the filter is shared with the desktop');
+  assert.ok(after.data.map.waypoints.some((w) => w.name === 'Phone pin' && w.x === 40.5));
+  assert.equal(controller.overlay.waypoints().find((w) => w.id === added.data.id).y, 60.25, 'the desktop has it too');
+
+  // ARK teleports by memory only, which needs mods: a clear refusal, no crash.
+  const tp = await ask({ type: 'teleportTo', x: 10, y: 10 });
+  assert.equal(tp.ok, false);
+  assert.match(tp.error, /mods/i);
+
+  const other = map.variants.find((v) => v.id !== map.variant.id);
+  assert.equal((await ask({ type: 'setVariant', id: other.id })).ok, true);
+  const switched = await waitFor(ws, (m) => m.type === 'snapshot' && m.data.map.variant.id === other.id);
+  assert.ok(!switched.data.map.waypoints.some((w) => w.id === added.data.id), 'waypoints belong to their map');
+  assert.equal((await ask({ type: 'removeWaypoint', id: added.data.id })).ok, true);
+  ws.close();
+  await remote.shutdown();
+});
+
+test('phone map picture: needs the token in a header, and comes back as the image', async () => {
+  const { controller, remote, port, settings } = await setup();
+  controller.attach({ demo: true });
+  const token = settings.remote.token;
+  assert.equal((await getWithToken(port, '/api/map-image')).status, 401, 'no token');
+  assert.equal((await getWithToken(port, '/api/map-image', 'wrong')).status, 401);
+  assert.equal((await getWithToken(port, `/api/map-image?t=${token}`)).status, 401, 'a token in the URL is not accepted');
+  const ok = await getWithToken(port, '/api/map-image?k=1', token);
+  assert.equal(ok.status, 200);
+  assert.match(ok.type, /^image\//);
+  assert.ok(ok.body.length > 1000);
+  assert.equal((await getWithToken(port, '/api/other', token)).status, 404);
+
+  // A game with no picture: 404, not a crash.
+  controller.listProcesses = () => [];
+  controller.attach({ packId: 'phasmophobia' });
+  assert.equal((await getWithToken(port, '/api/map-image', token)).status, 404);
+  assert.equal(controller.snapshot().map, null, 'no map, no Map tab');
+
+  // Wrong guesses count toward the same lockout as the socket.
+  for (let i = 0; i < 10; i++) await getWithToken(port, '/api/map-image', `bad${i}`);
+  assert.equal((await getWithToken(port, '/api/map-image', token)).status, 429);
+  await remote.shutdown();
+});
+
+test('phone gets the live position with values', async () => {
+  const { controller, remote, port, settings } = await setup();
+  controller.attach({ demo: true });
+  const ws = connect(port, settings.remote.token);
+  const snap = await waitFor(ws, (m) => m.type === 'snapshot');
+  assert.ok(snap.data.map.image, 'the demo has a picture');
+  assert.equal(snap.data.map.teleport, 'memory');
+  const v = await waitFor(ws, (m) => m.type === 'values' && m.pos, 4000);
+  assert.ok(Number.isFinite(v.pos.x) && Number.isFinite(v.pos.y));
+  ws.close();
+  controller.shutdown();
+  await remote.shutdown();
+});
+
+test('phone Library: info, entries, entry, search, guides and notes', async () => {
+  const { controller, remote, port, settings } = await setup();
+  controller.listProcesses = () => [];
+  controller.attach({ packId: 'lego-star-wars-complete-saga' });
+  const ws = connect(port, settings.remote.token);
+  const snap = await waitFor(ws, (m) => m.type === 'snapshot');
+  assert.equal(snap.data.library, true);
+  let n = 500;
+  const lib = async (extra) => {
+    const reqId = ++n;
+    ws.send(JSON.stringify({ type: 'lib', reqId, ...extra }));
+    const r = await waitFor(ws, (m) => m.type === 'result' && m.reqId === reqId);
+    return r;
+  };
+  const info = (await lib({ action: 'info' })).data;
+  assert.ok(!('userGuidesDir' in info), 'no PC folder paths go to the phone');
+  const sec = info.sections[0];
+  const list = (await lib({ action: 'entries', catalog: sec.catalog })).data;
+  assert.equal(list.length, 61);
+  assert.deepEqual(Object.keys(list[0]).sort(), ['category', 'id', 'map', 'name']);
+  const e = (await lib({ action: 'entry', catalog: sec.catalog, id: list[0].id })).data;
+  assert.equal(e.name, list[0].name);
+  assert.equal((await lib({ action: 'note', catalog: sec.catalog, id: e.id, text: 'got it' })).ok, true);
+  assert.equal(controller.library.entry(sec.catalog, e.id).note, 'got it', 'the desktop sees the note');
+  const hits = (await lib({ action: 'search', q: 'boba' })).data;
+  assert.ok(hits.some((h) => h.title === 'Boba Fett'));
+  const g = (await lib({ action: 'guide', id: info.guides[0].id })).data;
+  assert.match(g.html, /<h1/);
+  const bad = await lib({ action: 'guide', id: 'pack:../../package.json' });
+  assert.equal(bad.ok, false, 'guides stay in their folder');
+  assert.equal((await lib({ action: 'explode' })).ok, false);
+  ws.close();
+  await remote.shutdown();
+});
+
+test('phone Library pictures need the token; missing ones are a 404', async () => {
+  const { controller, remote, port, settings } = await setup();
+  controller.listProcesses = () => [];
+  controller.attach({ packId: 'lego-star-wars-complete-saga' });
+  const q = '/api/lib-image?kind=thumb&c=codes&id=LA811Y';
+  assert.equal((await getWithToken(port, q)).status, 401);
+  // No picture downloader in tests: the PC has nothing to give, so 404.
+  assert.equal((await getWithToken(port, q, settings.remote.token)).status, 404);
+  assert.equal((await getWithToken(port, '/api/lib-image?kind=../../x&c=codes&id=1', settings.remote.token)).status, 404);
+  // With a cached picture it comes back with its real type.
+  const pngs = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+  const file = path.join(os.tmpdir(), `ks-pic-${Date.now()}.png`);
+  fs.writeFileSync(file, Buffer.concat([pngs, Buffer.alloc(64)]));
+  controller.library.pictureFile = async () => file;
+  const ok = await getWithToken(port, q, settings.remote.token);
+  assert.equal(ok.status, 200);
+  assert.equal(ok.type, 'image/png');
+  await remote.shutdown();
+});
+
+test('phone can switch checklists, and the overlay follows', async () => {
+  const { controller, remote, port, settings } = await setup();
+  controller.listProcesses = () => [];
+  controller.attach({ packId: 'ark-survival-ascended' });
+  const ws = connect(port, settings.remote.token);
+  const snap = await waitFor(ws, (m) => m.type === 'snapshot');
+  assert.ok(snap.data.checklists.length >= 2);
+  const other = snap.data.checklists.find((l) => l.id !== snap.data.checklist.id);
+  ws.send(JSON.stringify({ type: 'setActiveList', id: other.id, reqId: 900 }));
+  assert.equal((await waitFor(ws, (m) => m.reqId === 900)).ok, true);
+  const after = await waitFor(ws, (m) => m.type === 'snapshot' && m.data.checklist?.id === other.id);
+  assert.equal(after.data.checklist.name, other.name);
+  assert.equal(controller.overlay.state().checklist.id, other.id);
+  ws.send(JSON.stringify({ type: 'setActiveList', id: 'nope', reqId: 901 }));
+  assert.equal((await waitFor(ws, (m) => m.reqId === 901)).ok, false);
+  ws.close();
+  await remote.shutdown();
+});
+
+test('phone commands: info without secrets, spawn from an entry, quick and typed commands', async () => {
+  const typed = [];
+  const { controller, remote, port, settings } = await setup({ commands: { consoleSend: async (pid, lines) => { typed.push(...lines); } } });
+  controller.listProcesses = () => [];
+  controller.attach({ pid: 4242, name: 'ArkAscended.exe' });
+  controller.commands.setSettings({ adminPassword: 'hunter2' });
+  const ws = connect(port, settings.remote.token);
+  const snap = await waitFor(ws, (m) => m.type === 'snapshot');
+  assert.equal(snap.data.hasCommands, true);
+  let n = 700;
+  const ask = async (msg) => {
+    const reqId = ++n;
+    ws.send(JSON.stringify({ ...msg, reqId }));
+    return waitFor(ws, (m) => m.type === 'result' && m.reqId === reqId);
+  };
+  const info = (await ask({ type: 'cmdInfo' })).data;
+  assert.equal(info.available, true);
+  assert.equal(info.hasAdminPassword, true);
+  assert.doesNotMatch(JSON.stringify(info), /hunter2/, 'the password never goes to the phone');
+  assert.ok(!('history' in info));
+
+  // Library entry -> its actions -> run one with the form's values.
+  const rex = controller.library.entries('creatures').find((e) => e.name === 'Rex');
+  const entry = (await ask({ type: 'lib', action: 'entry', catalog: 'creatures', id: rex.id })).data;
+  assert.ok(entry.commandActions.some((a) => a.id === 'summon-tamed'));
+  const run = await ask({ type: 'cmdRun', kind: 'action', id: 'summon-tamed', entryId: rex.id, values: { level: '200', count: '2' } });
+  assert.equal(run.ok, true, run.error);
+  assert.equal(typed.filter((l) => l.includes(`GMSummon "${rex.id}" 200`)).length, 2);
+
+  const bad = await ask({ type: 'cmdRun', kind: 'action', id: 'summon-tamed', entryId: rex.id, values: { level: '5000' } });
+  assert.equal(bad.ok, false);
+  assert.match(bad.error, /above 1000/);
+
+  assert.equal((await ask({ type: 'cmdRun', kind: 'quick', id: 'god' })).ok, true);
+  assert.equal((await ask({ type: 'cmdRaw', text: 'SetTimeOfDay 12:00', via: 'console' })).ok, true);
+  assert.ok(typed.some((l) => /SetTimeOfDay 12:00$/.test(l)));
+  assert.equal((await ask({ type: 'cmdAdmin' })).ok, true);
+  assert.ok(typed.includes('EnableCheats hunter2'));
+  assert.equal((await ask({ type: 'cmdRaw', text: '   ' })).ok, false);
+  ws.close();
+  await remote.shutdown();
 });

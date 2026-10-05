@@ -76,6 +76,16 @@ body.editing .otimers li, body.editing .olist li { cursor: pointer; }
 .olist li.done .box { background: var(--accent); border-color: var(--accent); }
 .olist li.done .text { color: var(--faint); text-decoration: line-through; }
 
+/* ---- identifier (read-only: tick evidence on the phone or desktop) ---- */
+.ident-panel { width: 280px; }
+.ident-body { padding: 8px 10px 10px; }
+.ident-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.ident-chips span { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: rgba(255,255,255,0.07); color: var(--muted); }
+.ident-chips .found { background: var(--accent-wash); color: var(--accent); }
+.ident-chips .out { color: var(--danger); text-decoration: line-through; }
+.ident-left { margin: 0; line-height: 1.4; color: var(--body); }
+.ident-left.solved { color: var(--accent); font-weight: 700; font-size: 15px; }
+
 /* ---- PC stats ---- */
 .pcstats { min-width: 150px; }
 

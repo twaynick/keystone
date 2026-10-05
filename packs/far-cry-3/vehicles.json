@@ -1,0 +1,20 @@
+[
+{"name": "Armored Personnel Carrier", "id": "armored-personnel-carrier", "category": "Vehicle", "page": "/wiki/Armored_Personnel_Carrier"},
+{"name": "Buggy", "id": "buggy-fc3", "category": "Vehicle", "page": "/wiki/Buggy/FC3"},
+{"name": "Cargo Truck", "id": "cargo-truck", "category": "Vehicle", "page": "/wiki/Cargo_Truck"},
+{"name": "Darrah", "id": "darrah-fc3", "category": "Vehicle", "page": "/wiki/Darrah/FC3"},
+{"name": "Hang Glider", "id": "hang-glider", "category": "Vehicle", "page": "/wiki/Hang_Glider"},
+{"name": "Helicopter Gunship", "id": "helicopter-gunship-fc3", "category": "Vehicle", "page": "/wiki/Helicopter_Gunship/FC3"},
+{"name": "Jet Ski", "id": "jet-ski-fc3", "category": "Vehicle", "page": "/wiki/Jet_Ski/FC3"},
+{"name": "Parachute", "id": "parachute", "category": "Vehicle", "page": "/wiki/Parachute"},
+{"name": "Patrol Boat", "id": "patrol-boat-fc3", "category": "Vehicle", "page": "/wiki/Patrol_Boat/FC3"},
+{"name": "Quad Bike", "id": "quad-bike", "category": "Vehicle", "page": "/wiki/Quad_Bike"},
+{"name": "RHIB", "id": "rhib-fc3", "category": "Vehicle", "page": "/wiki/RHIB/FC3"},
+{"name": "Ruined Plane", "id": "ruined-plane-fc3", "category": "Vehicle", "page": "/wiki/Ruined_Plane/FC3"},
+{"name": "Ruined Tank", "id": "ruined-tank-fc3", "category": "Vehicle", "page": "/wiki/Ruined_Tank/FC3"},
+{"name": "Scavenger", "id": "scavenger-fc3", "category": "Vehicle", "page": "/wiki/Scavenger/FC3"},
+{"name": "Stryus", "id": "stryus-fc3", "category": "Vehicle", "page": "/wiki/Stryus/FC3"},
+{"name": "Technical", "id": "technical", "category": "Vehicle", "page": "/wiki/Technical"},
+{"name": "Wingsuit", "id": "wingsuit", "category": "Vehicle", "page": "/wiki/Wingsuit"},
+{"name": "Zipline", "id": "zipline", "category": "Vehicle", "page": "/wiki/Zipline"}
+]

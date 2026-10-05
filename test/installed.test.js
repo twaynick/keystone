@@ -197,3 +197,12 @@ test('auto-attach never switches away from the open game, and respects a manual 
   assert.equal(c.autoAttachTick({ now: 50_000 }).game, 'Fallout 4');
   c.shutdown();
 });
+
+test('Play uses the installed copy before the pack\'s Steam app (other editions, other stores)', async () => {
+  const c = ctl([{ store: 'gog', id: '1', name: 'Fallout 4 GOTY', path: 'C:\\GOG\\Fallout 4', exe: 'Fallout4.exe', exePath: 'C:\\GOG\\Fallout 4\\Fallout4.exe' }]);
+  assert.deepEqual(await c.launchTarget('fallout-4'), { kind: 'path', path: 'C:\\GOG\\Fallout 4\\Fallout4.exe' });
+  const none = ctl([]);
+  assert.deepEqual(await none.launchTarget('fallout-4'), { kind: 'uri', uri: 'steam://rungameid/377160' }, 'not found installed: the pack\'s Steam app');
+  c.shutdown();
+  none.shutdown();
+});

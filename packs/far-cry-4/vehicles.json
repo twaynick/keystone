@@ -1,0 +1,22 @@
+[
+{"name": "Buggy", "id": "buggy-fc4", "category": "Vehicle", "page": "/wiki/Buggy/FC4"},
+{"name": "Buzzer", "id": "buzzer-fc4", "category": "Vehicle", "page": "/wiki/Buzzer/FC4"},
+{"name": "Cargo Truck", "id": "cargo-truck", "category": "Vehicle", "page": "/wiki/Cargo_Truck"},
+{"name": "Darrah", "id": "darrah-fc4", "category": "Vehicle", "page": "/wiki/Darrah/FC4"},
+{"name": "Elephant", "id": "elephant", "category": "Vehicle", "page": "/wiki/Elephant"},
+{"name": "Hang Glider", "id": "hang-glider", "category": "Vehicle", "page": "/wiki/Hang_Glider"},
+{"name": "Helicopter Gunship", "id": "helicopter-gunship-fc4", "category": "Vehicle", "page": "/wiki/Helicopter_Gunship/FC4"},
+{"name": "Jet Ski", "id": "jet-ski-fc4", "category": "Vehicle", "page": "/wiki/Jet_Ski/FC4"},
+{"name": "Minivan", "id": "minivan", "category": "Vehicle", "page": "/wiki/Minivan"},
+{"name": "Parachute", "id": "parachute", "category": "Vehicle", "page": "/wiki/Parachute"},
+{"name": "Patrol Boat", "id": "patrol-boat-fc4", "category": "Vehicle", "page": "/wiki/Patrol_Boat/FC4"},
+{"name": "Quad Bike", "id": "quad-bike", "category": "Vehicle", "page": "/wiki/Quad_Bike"},
+{"name": "RHIB", "id": "rhib-fc4", "category": "Vehicle", "page": "/wiki/RHIB/FC4"},
+{"name": "Scavenger", "id": "scavenger-fc4", "category": "Vehicle", "page": "/wiki/Scavenger/FC4"},
+{"name": "Snowmobile", "id": "snowmobile", "category": "Vehicle", "page": "/wiki/Snowmobile"},
+{"name": "Stryus", "id": "stryus-fc4", "category": "Vehicle", "page": "/wiki/Stryus/FC4"},
+{"name": "Technical", "id": "technical-far-cry-4", "category": "Vehicle", "page": "/wiki/Technical_(Far_Cry_4)"},
+{"name": "Tuk Tuk", "id": "tuk-tuk", "category": "Vehicle", "page": "/wiki/Tuk_Tuk"},
+{"name": "Wingsuit", "id": "wingsuit", "category": "Vehicle", "page": "/wiki/Wingsuit"},
+{"name": "Zipline", "id": "zipline", "category": "Vehicle", "page": "/wiki/Zipline"}
+]

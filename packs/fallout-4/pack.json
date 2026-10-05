@@ -39,7 +39,32 @@
         "label": "Nexus Mods",
         "url": "https://www.nexusmods.com/fallout4"
       }
-    ]
+    ],
+    "images": {
+      "api": "https://fallout.fandom.com/api.php",
+      "credit": "Pictures from Nukapedia, the Fallout Wiki on Fandom",
+      "creditUrl": "https://fallout.fandom.com/",
+      "catalogs": {
+        "items": {
+          "thumb": [
+            "File:{img}",
+            "{page}",
+            "{name} (Fallout 4)",
+            "{lname} (Fallout 4)",
+            "{name}",
+            "{lname}"
+          ],
+          "hero": [
+            "File:{img}",
+            "{page}",
+            "{name} (Fallout 4)",
+            "{lname} (Fallout 4)",
+            "{name}",
+            "{lname}"
+          ]
+        }
+      }
+    }
   },
   "commands": {
     "credits": "Item names and Form IDs from the Independent Fallout Wiki (fallout.wiki), community-maintained. Base game only.",

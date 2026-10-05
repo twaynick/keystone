@@ -1,0 +1,191 @@
+{
+  "name": "Phasmophobia",
+  "exe": [
+    "Phasmophobia.exe"
+  ],
+  "art": {
+    "steamAppId": 739630
+  },
+  "offlineOnly": true,
+  "offlineNote": "Single-player only. Use mods only in a solo, offline game: in multiplayer they spoil the contract for everyone else and can get your account banned. The ghost identifier, Library, timers and overlay never touch the game and are fine anywhere.",
+  "info": [
+    {
+      "title": "Ghost identifier",
+      "body": "Library, Ghost identifier: tap each piece of evidence as you find it or rule it out, and the list narrows to the ghosts that fit. Works from your phone too."
+    },
+    {
+      "title": "Evidence by difficulty",
+      "body": "Up to Professional the ghost gives 3 pieces of evidence, Nightmare 2, Insanity 1. Set this in the identifier so it doesn't rule out the right ghost."
+    },
+    {
+      "title": "Incense",
+      "body": "Lit near the ghost, incense stops it starting a hunt for 90 seconds (Spirit 180, Demon 60). The timer presets start one from your phone."
+    }
+  ],
+  "library": {
+    "catalogs": {
+      "ghosts": "ghosts.json",
+      "equipment": "equipment.json",
+      "cursed": "cursed.json",
+      "maps": "maps.json"
+    },
+    "sections": [
+      {
+        "id": "ghosts",
+        "label": "Ghosts",
+        "catalog": "ghosts",
+        "idLabel": "ID"
+      },
+      {
+        "id": "equipment",
+        "label": "Equipment",
+        "catalog": "equipment",
+        "idLabel": "ID"
+      },
+      {
+        "id": "cursed",
+        "label": "Cursed possessions",
+        "catalog": "cursed",
+        "idLabel": "ID"
+      },
+      {
+        "id": "maps",
+        "label": "Maps",
+        "catalog": "maps",
+        "idLabel": "ID"
+      }
+    ],
+    "guides": "guides",
+    "wiki": {
+      "label": "Phasmophobia Wiki",
+      "base": "https://phasmophobia.fandom.com"
+    },
+    "links": [
+      {
+        "label": "Phasmophobia Wiki",
+        "url": "https://phasmophobia.fandom.com/wiki/Phasmophobia_Wiki"
+      }
+    ],
+    "images": {
+      "api": "https://phasmophobia.fandom.com/api.php",
+      "credit": "Pictures and ghost details from the Phasmophobia Wiki on Fandom",
+      "creditUrl": "https://phasmophobia.fandom.com/",
+      "catalogs": {
+        "ghosts": {
+          "thumb": [
+            "{page}",
+            "{name}"
+          ],
+          "hero": [
+            "{page}",
+            "{name}"
+          ]
+        },
+        "equipment": {
+          "thumb": [
+            "{page}",
+            "{name}"
+          ],
+          "hero": [
+            "{page}",
+            "{name}"
+          ]
+        },
+        "cursed": {
+          "thumb": [
+            "{page}",
+            "{name}"
+          ],
+          "hero": [
+            "{page}",
+            "{name}"
+          ]
+        },
+        "maps": {
+          "thumb": [
+            "{page}",
+            "{name}"
+          ],
+          "hero": [
+            "{page}",
+            "{name}"
+          ]
+        }
+      }
+    }
+  },
+  "identify": {
+    "title": "Ghost identifier",
+    "catalog": "ghosts",
+    "traits": [
+      {
+        "id": "emf",
+        "name": "EMF Level 5"
+      },
+      {
+        "id": "dots",
+        "name": "D.O.T.S. Projector"
+      },
+      {
+        "id": "uv",
+        "name": "Ultraviolet"
+      },
+      {
+        "id": "freezing",
+        "name": "Freezing Temperatures"
+      },
+      {
+        "id": "orb",
+        "name": "Ghost Orb"
+      },
+      {
+        "id": "writing",
+        "name": "Ghost Writing"
+      },
+      {
+        "id": "box",
+        "name": "Spirit Box"
+      }
+    ],
+    "given": {
+      "label": "Evidence the ghost gives",
+      "default": 3,
+      "options": [
+        [
+          3,
+          "3 (Professional and easier)"
+        ],
+        [
+          2,
+          "2 (Nightmare)"
+        ],
+        [
+          1,
+          "1 (Insanity)"
+        ],
+        [
+          0,
+          "0 (custom difficulty)"
+        ]
+      ]
+    }
+  },
+  "timerPresets": [
+    {
+      "name": "Incense",
+      "duration": 90
+    },
+    {
+      "name": "Incense (Spirit)",
+      "duration": 180
+    },
+    {
+      "name": "Incense (Demon)",
+      "duration": 60
+    },
+    {
+      "name": "Hunt cooldown",
+      "duration": 25
+    }
+  ]
+}

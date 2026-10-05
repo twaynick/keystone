@@ -2,6 +2,7 @@
 
 const { app, BrowserWindow, ipcMain, dialog, nativeTheme, shell, protocol, net, safeStorage, clipboard, Notification, globalShortcut } = require('electron');
 const { pathToFileURL } = require('url');
+const fs = require('fs');
 const path = require('path');
 const { Controller } = require('./controller');
 const { Settings } = require('./settings');
@@ -11,6 +12,7 @@ const { createTray } = require('./tray');
 const { KeystoneBrowser } = require('./browser-window');
 const { ArtCache } = require('./art');
 const { Timers } = require('./timers');
+const { LibraryImages, mimeOf } = require('./library-images');
 const { HotkeyRegistry } = require('./hotkeys');
 const { loadPacks } = require('./packs');
 
@@ -58,6 +60,9 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'ksmap', privileges: { standard: true, secure: true, supportFetchAPI: true } },
   // ksart://cover/<pack id> and ksart://hero/<pack id>: game art (see art.js).
   { scheme: 'ksart', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  // kslib://thumb|hero/<catalog>/<entry id>, kslib://spawn|spawnmap/<map #>/<catalog>/<entry id>:
+  // Library pictures from the game's wiki (see library-images.js).
+  { scheme: 'kslib', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
 let mainWindow = null;
 
@@ -246,6 +251,29 @@ function createController() {
     return net.fetch(pathToFileURL(file).toString());
   });
 
+  controller.library.images = new LibraryImages({
+    dataDir: app.getPath('userData'),
+    fetchImpl: (url, opts) => net.fetch(url, opts),
+    // Wikis ask tools to say who they are.
+    userAgent: `Keystone/${app.getVersion()} (game companion app; https://github.com/twaynick/keystone)`,
+  });
+  protocol.handle('kslib', async (req) => {
+    try {
+      const u = new URL(req.url);
+      const [a, b, c] = u.pathname.replace(/^\//, '').split('/').map(decodeURIComponent);
+      const kind = u.hostname;
+      const file = kind === 'thumb' || kind === 'hero' ? await controller.library.pictureFile(kind, a, b)
+        : kind === 'spawn' ? await controller.library.spawnFile('overlay', Number(a), b, c)
+          : kind === 'spawnmap' ? await controller.library.spawnFile('map', Number(a), b, c)
+            : null;
+      if (!file) return new Response('No picture', { status: 404 });
+      const buf = await fs.promises.readFile(file);
+      return new Response(buf, { headers: { 'content-type': mimeOf(buf), 'cache-control': 'max-age=86400' } });
+    } catch {
+      return new Response('No picture', { status: 404 });
+    }
+  });
+
   protocol.handle('ksmap', () => {
     // Needs only a selected game, not mods: ASA on a BattlEye server has a
     // map and waypoints but no memory session.
@@ -326,7 +354,20 @@ handle('overlay:teleport', (target) => ov().teleport(target));
 handle('overlay:setVariant', (id) => ov().setVariant(String(id)));
 handle('overlay:setCrosshair', (patch) => ov().setCrosshair(patch || {}));
 handle('overlay:setPcStats', (patch) => ov().setPcStats(patch || {}));
+handle('identify:info', () => controller.identify.info());
+handle('identify:cycle', (id) => controller.identify.cycle(String(id)));
+handle('identify:set', (id, mark) => controller.identify.setTrait(String(id), mark ?? null));
+handle('identify:given', (n) => controller.identify.setGiven(n));
+handle('identify:strike', (id, on) => controller.identify.strike(String(id), on));
+handle('identify:reset', () => controller.identify.reset());
 handle('timers:add', (t) => timers.add(t || {}));
+// Presets come from the selected game's pack, by position, so a page can't
+// make up its own.
+handle('timers:preset', (i) => {
+  const p = controller.pack?.timerPresets?.[Number(i)];
+  if (!p) throw new Error('That timer isn\u2019t in this game\u2019s list.');
+  return timers.startPreset(p);
+});
 handle('timers:update', (id, patch) => timers.update(String(id), patch || {}));
 handle('timers:start', (id) => timers.start(String(id)));
 handle('timers:pause', (id) => timers.pause(String(id)));

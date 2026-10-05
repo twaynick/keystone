@@ -1,0 +1,8 @@
+[
+{"name": "Bait", "id": "bait", "category": "Weapon", "page": "/wiki/Bait"},
+{"name": "Club", "id": "club", "category": "Weapon", "page": "/wiki/Club"},
+{"name": "Double Bow", "id": "double-bow", "category": "Weapon", "page": "/wiki/Double_Bow"},
+{"name": "Long Bow", "id": "long-bow", "category": "Weapon", "page": "/wiki/Long_Bow"},
+{"name": "Rock", "id": "rock", "category": "Weapon", "page": "/wiki/Rock"},
+{"name": "Two-Handed Club", "id": "two-handed-club", "category": "Weapon", "page": "/wiki/Two-Handed_Club"}
+]

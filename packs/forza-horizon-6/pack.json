@@ -1,0 +1,102 @@
+{
+  "name": "Forza Horizon 6",
+  "exe": [
+    "ForzaHorizon6.exe"
+  ],
+  "art": {
+    "steamAppId": 2483190
+  },
+  "offlineOnly": true,
+  "offlineNote": "Forza Horizon 6 saves your progress to your Xbox profile and syncs it whenever you're online, so anything a mod changes (credits, cars, XP, Wheelspins) goes with you into online play, including if you modded in Solo or offline. Playground Games bans accounts it finds cheating. Use mods only playing offline, and only on progress you're prepared to lose.",
+  "info": [
+    {
+      "title": "Library",
+      "body": "Every car in Forza Horizon 6 (651) by make, with its class, value, how to get it and stats, pictures, and links to the Forza Wiki."
+    },
+    {
+      "title": "Overlay",
+      "body": "Set Display mode to Windowed or Borderless (Video options) for the overlay and Keystone's browser to show on top."
+    }
+  ],
+  "library": {
+    "catalogs": {
+      "cars": "cars.json"
+    },
+    "sections": [
+      {
+        "id": "cars",
+        "label": "Cars",
+        "catalog": "cars",
+        "idLabel": "ID"
+      }
+    ],
+    "guides": "guides",
+    "wiki": {
+      "label": "Forza Wiki",
+      "base": "https://forza.fandom.com"
+    },
+    "links": [
+      {
+        "label": "Forza Wiki",
+        "url": "https://forza.fandom.com/wiki/Forza_Horizon_6"
+      },
+      {
+        "label": "All cars (Forza Wiki)",
+        "url": "https://forza.fandom.com/wiki/Forza_Horizon_6/Cars"
+      }
+    ],
+    "images": {
+      "api": "https://forza.fandom.com/api.php",
+      "credit": "Pictures from the Forza Wiki on Fandom",
+      "creditUrl": "https://forza.fandom.com/",
+      "catalogs": {
+        "cars": {
+          "thumb": [
+            "File:FH6 {page}.png",
+            "{page}"
+          ],
+          "hero": [
+            "File:FH6 {page}.png",
+            "{page}"
+          ]
+        }
+      }
+    }
+  },
+  "checklists": [
+    {
+      "name": "Barn Finds",
+      "items": [
+        "1987 Ford Sierra Cosworth RS500 (Southwest Ito)",
+        "2005 Honda NSX-R GT (South of the Horizon Festival)",
+        "1997 Lamborghini Diablo SV (East Ito)",
+        "1962 Lincoln Continental (West of The Estate)",
+        "1991 Mazda #55 Mazda 787B (Central Takashiro)",
+        "1997 Mitsubishi Montero Evolution (East Shimanoyama)",
+        "2005 Mitsubishi #1 Sierra Sierra Enterprises Lancer Evolution Time Attack (North Shimanoyama)",
+        "1971 Nissan Skyline 2000GT-R (Southwest Nangan)",
+        "1983 Nissan #11 Tomica Skyline Turbo Super Silhouette (Central Ito)",
+        "1989 Nissan PAO (West Minamino)",
+        "1998 Nissan #23 Pennzoil NISMO Skyline GT-R (West Takashiro)",
+        "1998 Nissan R390 (GT1) (Southwest Ohtani)",
+        "1984 Peugeot 205 Turbo 16 (Northwest Shimanoyama)",
+        "1982 Porsche 911 Turbo 3.3 (South Ohtani)",
+        "1969 Toyota 2000GT (North Ito)"
+      ]
+    },
+    {
+      "name": "Treasure Cars",
+      "items": [
+        "1981 BMW M1 (North Hokubu)",
+        "1969 Dodge Charger R/T (Central Minamino)",
+        "2005 Ford GT (Southeast Nangan)",
+        "1974 Lancia Stratos HF Stradale (Central Sotoyama)",
+        "1985 Mazda RX-7 GSL-SE (Northwest Ohtani)",
+        "1995 Mitsubishi Lancer Evolution III GSR (West Takashiro)",
+        "1985 Nissan Safari Turbo (North Ito)",
+        "1991 Nissan Figaro (Southwest Tokyo)",
+        "1987 Porsche 959 (North Shimanoyama)"
+      ]
+    }
+  ]
+}

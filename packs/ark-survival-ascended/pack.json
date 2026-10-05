@@ -200,7 +200,90 @@
         "label": "wikily",
         "url": "https://wikily.gg/ark-survival-ascended/"
       }
-    ]
+    ],
+    "images": {
+      "source": "https://ark.wiki.gg/wiki/Special:FilePath/",
+      "credit": "Pictures and spawn maps from the ARK Official Community Wiki",
+      "creditUrl": "https://ark.wiki.gg/",
+      "catalogs": {
+        "creatures": {
+          "thumb": [
+            "{name}.png"
+          ],
+          "hero": [
+            "Dossier_{name}.png",
+            "{name}.png"
+          ],
+          "spawnMaps": true
+        },
+        "items": {
+          "thumb": [
+            "{name}.png"
+          ],
+          "hero": [
+            "{name}.png"
+          ]
+        }
+      },
+      "dropPrefixes": [
+        "Aberrant",
+        "Abyssal",
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "Corrupted",
+        "Tek",
+        "Brute",
+        "Elite",
+        "Enraged",
+        "Polar",
+        "Skeletal",
+        "Zombie",
+        "Eerie",
+        "Toxic",
+        "Bone",
+        "Lunar",
+        "X-",
+        "R-"
+      ],
+      "spawnMaps": [
+        {
+          "name": "The Island",
+          "map": "The_Island_Topographic_Map.jpg",
+          "overlay": "Spawning_{name}_The_Island.svg"
+        },
+        {
+          "name": "Scorched Earth",
+          "map": "Scorched_Earth_Topographic_Map.jpg",
+          "overlay": "Spawning_{name}_Scorched_Earth.svg"
+        },
+        {
+          "name": "The Center",
+          "map": "The_Center_Topographic_Map.jpg",
+          "overlay": "Spawning_{name}_The_Center.svg"
+        },
+        {
+          "name": "Aberration",
+          "map": "Aberration_Topographic_Map.jpg",
+          "overlay": "Spawning_{name}_Aberration.svg"
+        },
+        {
+          "name": "Extinction",
+          "map": "Extinction_Topographic_Map.jpg",
+          "overlay": "Spawning_{name}_Extinction.svg"
+        },
+        {
+          "name": "Ragnarok",
+          "map": "Ragnarok_Ocean_Topographic_Map.jpg",
+          "overlay": "Spawning_{name}_Ragnarok.svg"
+        },
+        {
+          "name": "Valguero",
+          "map": "Valguero_Topographic_Map.jpg",
+          "overlay": "Spawning_{name}_Valguero.svg"
+        }
+      ]
+    }
   },
   "commands": {
     "credits": "Creature and item IDs from the ARK Wiki (ark.wiki.gg), community-maintained.",

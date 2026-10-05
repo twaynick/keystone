@@ -45,11 +45,77 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build installer
+      # Code signing with Azure Artifact Signing (see docs/SIGNING.md). It
+      # switches on by itself once the repo has the three AZURE_* secrets and
+      # the four AZURE_SIGNING_* variables; until then builds are unsigned,
+      # exactly as before. Half a setup is an error rather than a silent
+      # unsigned release.
+      - name: Check code-signing setup
+        id: signing
+        shell: bash
+        env:
+          HAS_SECRET: ${{ secrets.AZURE_CLIENT_SECRET != '' }}
+          ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+          PUBLISHER: ${{ vars.AZURE_SIGNING_PUBLISHER }}
+        run: |
+          set_count=0
+          for v in "$ENDPOINT" "$ACCOUNT" "$PROFILE" "$PUBLISHER"; do [ -n "$v" ] && set_count=$((set_count+1)); done
+          if [ "$HAS_SECRET" != "true" ] && [ "$set_count" = 0 ]; then
+            echo "sign=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No code-signing setup: building an unsigned installer."
+            exit 0
+          fi
+          if [ "$HAS_SECRET" != "true" ] || [ "$set_count" != 4 ]; then
+            echo "::error::Code signing is half set up. Needed: secrets AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET and variables AZURE_SIGNING_ENDPOINT, AZURE_SIGNING_ACCOUNT, AZURE_SIGNING_PROFILE, AZURE_SIGNING_PUBLISHER. See docs/SIGNING.md."
+            exit 1
+          fi
+          case "$ENDPOINT" in
+            https://*.codesigning.azure.net|https://*.codesigning.azure.net/) ;;
+            *) echo "::error::AZURE_SIGNING_ENDPOINT should look like https://eus.codesigning.azure.net (the region of your signing account)."; exit 1 ;;
+          esac
+          echo "sign=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build installer (unsigned)
+        if: steps.signing.outputs.sign != 'true'
         run: npm run dist
         env:
-          # No code-signing certificate; Windows SmartScreen will warn once.
+          # Windows SmartScreen shows "Unknown publisher" for unsigned builds.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Build and sign installer
+        if: steps.signing.outputs.sign == 'true'
+        shell: bash
+        # Settings go on the command line rather than in package.json so the
+        # repo works for anyone, signed or not.
+        run: >
+          npm run dist --
+          "-c.win.azureSignOptions.publisherName=$PUBLISHER"
+          "-c.win.azureSignOptions.endpoint=$ENDPOINT"
+          "-c.win.azureSignOptions.codeSigningAccountName=$ACCOUNT"
+          "-c.win.azureSignOptions.certificateProfileName=$PROFILE"
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # Read by Azure's sign-in library (EnvironmentCredential).
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+          PUBLISHER: ${{ vars.AZURE_SIGNING_PUBLISHER }}
+
+      # Don't publish something that only looks signed.
+      - name: Check the signature
+        if: steps.signing.outputs.sign == 'true'
+        shell: pwsh
+        run: |
+          foreach ($f in Get-ChildItem dist/*.exe) {
+            $sig = Get-AuthenticodeSignature $f.FullName
+            Write-Host "$($f.Name): $($sig.Status), signed by $($sig.SignerCertificate.Subject)"
+            if ($sig.Status -ne 'Valid') { Write-Error "$($f.Name) isn't validly signed: $($sig.StatusMessage)"; exit 1 }
+          }
 
       - name: Keep the installer as a build artifact
         uses: actions/upload-artifact@v4

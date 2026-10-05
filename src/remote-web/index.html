@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' ws:; img-src 'self' data:; style-src 'self'; font-src 'self'; script-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' ws:; img-src 'self' data: blob:; style-src 'self'; font-src 'self'; script-src 'self'">
   <meta name="theme-color" content="#0e1115">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -41,28 +41,90 @@
   </section>
 
   <section class="notice" id="noMods" hidden>
-    <h1>No mods loaded</h1>
-    <p>Load a cheat table for this game in Keystone on your PC.</p>
+    <h1>Nothing here yet</h1>
+    <p>Load a cheat table for this game in Keystone on your PC, or pick a game with a map or tools.</p>
   </section>
 
-  <main id="mods" hidden>
-    <div class="profile-row" id="profileRow" hidden>
-      <select class="field" id="profile" aria-label="Profile"></select>
+  <main id="main" hidden>
+    <div class="pane" id="paneMods" hidden>
+      <div class="profile-row" id="profileRow" hidden>
+        <select class="field" id="profile" aria-label="Profile"></select>
+      </div>
+      <div id="list"></div>
     </div>
-    <div id="list"></div>
-    <section class="tp" id="timersSec" hidden>
-      <h2 class="tp-head">Timers</h2>
-      <div id="timerRows"></div>
-    </section>
-    <section class="tp" id="listSec" hidden>
-      <h2 class="tp-head" id="listName">Checklist</h2>
-      <div id="listRows"></div>
-    </section>
-    <section class="tp" id="teleport" hidden>
-      <h2 class="tp-head">Teleport</h2>
-      <div id="tpList"></div>
-    </section>
+
+    <div class="pane" id="paneMap" hidden>
+      <div class="map-tools">
+        <select class="field" id="mapVariant" aria-label="Map" hidden></select>
+        <button class="btn small" id="mapFindMe" hidden>Find me</button>
+        <button class="btn small" id="mapCenter">Center</button>
+      </div>
+      <div class="chips" id="mapLayers" aria-label="Show on map"></div>
+      <div class="map-wrap" id="mapWrap">
+        <canvas id="mapCanvas" aria-label="Map. Drag to move, pinch to zoom, tap a spot for options."></canvas>
+        <button class="btn map-full" id="mapFull" aria-label="Full screen map" aria-pressed="false">&#x26F6;</button>
+        <div class="map-zoom">
+          <button class="btn" id="mapZoomIn" aria-label="Zoom in">+</button>
+          <button class="btn" id="mapZoomOut" aria-label="Zoom out">&minus;</button>
+        </div>
+        <div class="map-note" id="mapNote" hidden></div>
+        <div class="map-status">
+          <span id="mapPos">Position unknown</span>
+          <span id="mapTracked"></span>
+        </div>
+      </div>
+      <h2 class="tp-head">Waypoints</h2>
+      <div id="wpList"></div>
+      <p class="map-credit" id="mapCredit" hidden></p>
+    </div>
+
+    <div class="pane" id="paneLibrary" hidden>
+      <div class="lib-top">
+        <button class="btn small ghost lib-back" id="libBack" hidden>&#8249; Back</button>
+        <input class="field lib-search" id="libSearch" type="search" placeholder="Search the Library" autocomplete="off" enterkeyhint="search">
+      </div>
+      <div id="libBody"></div>
+    </div>
+
+    <div class="pane" id="paneTools" hidden>
+      <section class="tp" id="cmdSec" hidden>
+        <h2 class="tp-head">Commands</h2>
+        <p class="cmd-note" id="cmdNote"></p>
+        <div class="cmd-admin" id="cmdAdminRow" hidden><button class="btn" id="cmdAdmin">Admin login</button></div>
+        <div class="cmd-quick" id="cmdQuick"></div>
+        <div class="cmd-raw">
+          <input class="field" id="cmdRawText" placeholder="Type a command" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="500" enterkeyhint="send">
+          <select class="field" id="cmdRawVia" aria-label="Send through" hidden><option value="console">Console</option><option value="rcon">RCON</option></select>
+          <button class="btn primary" id="cmdRawSend">Send</button>
+        </div>
+      </section>
+      <section class="tp" id="identSec" hidden>
+        <h2 class="tp-head" id="identTitle">Identifier</h2>
+        <div class="ident-ev" id="identEv"></div>
+        <p class="ident-left" id="identLeft"></p>
+        <div class="ident-actions"><select class="field" id="identGiven" aria-label="Evidence given"></select><button class="btn" id="identReset">New contract</button></div>
+      </section>
+      <section class="tp" id="timersSec" hidden>
+        <h2 class="tp-head">Timers</h2>
+        <div class="preset-row" id="presetRow"></div>
+        <div id="timerRows"></div>
+      </section>
+      <section class="tp" id="listSec" hidden>
+        <h2 class="tp-head" id="listName">Checklist</h2>
+        <div class="list-pick" id="listPickRow" hidden>
+          <select class="field" id="listPick" aria-label="Checklist"></select>
+        </div>
+        <div id="listRows"></div>
+      </section>
+    </div>
   </main>
+
+  <nav class="tabs" id="tabs" hidden>
+    <button class="tab" data-tab="mods" id="tabMods"><span class="tab-ico" aria-hidden="true">&#9776;</span>Mods</button>
+    <button class="tab" data-tab="map" id="tabMap"><span class="tab-ico" aria-hidden="true">&#9673;</span>Map</button>
+    <button class="tab" data-tab="library" id="tabLibrary"><span class="tab-ico" aria-hidden="true">&#9636;</span>Library</button>
+    <button class="tab" data-tab="tools" id="tabTools"><span class="tab-ico" aria-hidden="true">&#9201;</span>Tools</button>
+  </nav>
 
   <div class="sheet-backdrop" id="backdrop" hidden></div>
   <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetName" hidden>
@@ -77,8 +139,29 @@
     <button class="btn ghost sheet-unlock" id="sheetUnlock">Unlock</button>
   </section>
 
+  <section class="sheet" id="spotSheet" role="dialog" aria-modal="true" aria-labelledby="spotName" hidden>
+    <div class="grip" aria-hidden="true"></div>
+    <h2 id="spotName"></h2>
+    <p class="spot-sub" id="spotSub"></p>
+    <input class="field sheet-input spot-input" id="spotInput" placeholder="Waypoint name" maxlength="40" autocomplete="off" hidden>
+    <div class="spot-actions" id="spotActions"></div>
+  </section>
+
+  <section class="sheet" id="cmdSheet" role="dialog" aria-modal="true" aria-labelledby="cmdName" hidden>
+    <div class="grip" aria-hidden="true"></div>
+    <h2 id="cmdName"></h2>
+    <p class="spot-sub" id="cmdHelp"></p>
+    <div class="cmd-fields" id="cmdFields"></div>
+    <p class="cmd-preview" id="cmdVia"></p>
+    <div class="spot-actions"><button class="btn primary" id="cmdRun">Run</button></div>
+  </section>
+
   <div class="toast" id="toast" role="status" hidden></div>
   <script src="shared/theme.js"></script>
+  <script src="shared/map-math.js"></script>
   <script src="remote.js"></script>
+  <script src="remote-map.js"></script>
+  <script src="remote-commands.js"></script>
+  <script src="remote-lib.js"></script>
 </body>
 </html>

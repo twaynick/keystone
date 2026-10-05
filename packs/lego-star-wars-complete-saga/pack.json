@@ -1,0 +1,85 @@
+{
+  "name": "LEGO Star Wars: The Complete Saga",
+  "exe": [
+    "LEGOStarWarsSaga.exe"
+  ],
+  "art": {
+    "steamAppId": 32440
+  },
+  "info": [
+    {
+      "title": "Codes",
+      "body": "In the Mos Eisley Cantina, go to the counter and choose Enter Code. Entering a code makes it available in the shop; buy it there with studs. Extras are then switched on from the pause menu."
+    },
+    {
+      "title": "Copying codes",
+      "body": "Codes have to be typed in the game's code screen. Every code in the Library has a Copy button and big, easy-to-read letters."
+    }
+  ],
+  "library": {
+    "catalogs": {
+      "codes": "codes.json"
+    },
+    "sections": [
+      {
+        "id": "codes",
+        "label": "Codes",
+        "catalog": "codes",
+        "idLabel": "Code"
+      }
+    ],
+    "guides": "guides",
+    "links": [
+      {
+        "label": "LEGO Star Wars Wiki",
+        "url": "https://legostarwars.fandom.com/wiki/LEGO_Star_Wars:_The_Complete_Saga"
+      }
+    ],
+    "images": {
+      "api": "https://legostarwars.fandom.com/api.php",
+      "credit": "Pictures from the LEGO Star Wars Wiki on Fandom",
+      "creditUrl": "https://legostarwars.fandom.com/",
+      "catalogs": {
+        "codes": {
+          "thumb": [
+            "{name}"
+          ],
+          "hero": [
+            "{name}"
+          ]
+        }
+      }
+    }
+  },
+  "checklists": [
+    {
+      "name": "Codes entered",
+      "items": [
+        "Battle Droid (Commander) (KPF958)",
+        "Boba Fett (LA811Y)",
+        "Boss Nass (HHY697)",
+        "Captain Tarpals (QRN714)",
+        "Count Dooku (DDD748)",
+        "Ewok (EWK785)",
+        "General Grievous (PMN576)",
+        "Greedo (ZZR636)",
+        "Imperial Guard (GUA850)",
+        "Jango Fett (KLJ897)",
+        "Ki Adi Mundi (MUN486)",
+        "Luminara Unduli (LUM521)",
+        "Padmé (VBJ322)",
+        "Sandtrooper (CBR954)",
+        "Stormtrooper (NBN431)",
+        "Taun We (PRX482)",
+        "Watto (PLL967)",
+        "Zam Wesell (584HJF)",
+        "Droid Tri-Fighter (AAB123)",
+        "Imperial Shuttle (HUT845)",
+        "TIE Fighter (DBH897)",
+        "TIE Interceptor (INT729)",
+        "Vulture Droid (BDC866)",
+        "Zam’s Speeder (UUU875)"
+      ]
+    }
+  ]
+}

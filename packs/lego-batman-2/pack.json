@@ -1,0 +1,68 @@
+{
+  "name": "LEGO Batman 2: DC Super Heroes",
+  "exe": [
+    "LEGOBatman2.exe"
+  ],
+  "art": {
+    "steamAppId": 213330
+  },
+  "info": [
+    {
+      "title": "Codes",
+      "body": "Pause the game and choose Enter Code (Extras on consoles), then type the code. Characters and extras may still need buying with studs after the code is accepted."
+    },
+    {
+      "title": "Copying codes",
+      "body": "Codes have to be typed in the game's code screen. Every code in the Library has a Copy button and big, easy-to-read letters."
+    }
+  ],
+  "library": {
+    "catalogs": {
+      "codes": "codes.json"
+    },
+    "sections": [
+      {
+        "id": "codes",
+        "label": "Codes",
+        "catalog": "codes",
+        "idLabel": "Code"
+      }
+    ],
+    "guides": "guides",
+    "links": [
+      {
+        "label": "Brickipedia",
+        "url": "https://lego.fandom.com/wiki/LEGO_Batman_2:_DC_Super_Heroes"
+      }
+    ],
+    "images": {
+      "api": "https://lego.fandom.com/api.php",
+      "credit": "Pictures from Brickipedia, the LEGO Wiki on Fandom",
+      "creditUrl": "https://lego.fandom.com/",
+      "catalogs": {
+        "codes": {
+          "thumb": [
+            "{name}"
+          ],
+          "hero": [
+            "{name}"
+          ]
+        }
+      }
+    }
+  },
+  "checklists": [
+    {
+      "name": "Codes entered",
+      "items": [
+        "Clown Goon (9ZZZBP)",
+        "LexBot (W49CSJ)",
+        "Mime Goon (ZQA8MK)",
+        "Policeman (V9SAGT)",
+        "Riddler Goon (Q285LK)",
+        "Two-Face Goon (95KPYJ)",
+        "Harley Quinn's Motorbike (C79LVH)"
+      ]
+    }
+  ]
+}

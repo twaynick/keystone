@@ -169,3 +169,15 @@ test('timers show in the overlay state and phone snapshot when wired', () => {
   assert.equal(c.snapshot().timers[0].name, 'Egg');
   c.shutdown();
 });
+
+test('presets start a named timer, and restart it when tapped again', () => {
+  const { timers, time } = make();
+  const t = timers.startPreset({ name: 'Incense', duration: 90 });
+  assert.equal(t.state, 'running');
+  assert.equal(t.remainingMs, 90000);
+  time.advance(60000);
+  const again = timers.startPreset({ name: 'Incense', duration: 90 });
+  assert.equal(again.id, t.id, 'same timer, not a second one');
+  assert.equal(again.remainingMs, 90000, 'count starts over');
+  assert.equal(timers.list().length, 1);
+});

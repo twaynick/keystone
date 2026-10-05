@@ -40,6 +40,7 @@ const OVERLAY_DEFAULTS = () => ({
     mods: { x: 0.80, y: 0.45, visible: true },
     timers: { x: 0.80, y: 0.62, visible: true },
     checklist: { x: 0.015, y: 0.62, visible: true },
+    identify: { x: 0.40, y: 0.80, visible: true },
     // Off until asked for: most people only want it while troubleshooting.
     pcstats: { x: 0.80, y: 0.80, visible: false },
   },

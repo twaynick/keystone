@@ -23,7 +23,10 @@ const app = {
   retryMs: 500,
   sheetId: null,
   rejected: false,
+  tab: null,
 };
+const TAB_KEY = 'keystone.tab';
+const TABS = ['mods', 'map', 'library', 'tools'];
 
 // ---------- token ----------
 function readToken() {
@@ -52,7 +55,7 @@ function connect() {
     try { msg = JSON.parse(e.data); } catch { return; }
     if (msg.type === 'snapshot') { app.snapshot = msg.data; app.snapAt = Date.now(); render(); }
     else if (msg.type === 'alert') toast(msg.text);
-    else if (msg.type === 'values') patchValues(msg.data);
+    else if (msg.type === 'values') { patchValues(msg.data); if (window.PhoneMap) PhoneMap.setLive(msg.pos || null); }
     else if (msg.type === 'result') settle(msg);
     else if (msg.type === 'appearance' && window.KeystoneTheme) KeystoneTheme.applyAccent(msg.data.accent);
   };
@@ -80,7 +83,9 @@ function connect() {
   };
 }
 
-function request(msg) {
+// Most commands answer at once; Find me and command teleports type into the
+// game, which takes a few seconds.
+function request(msg, timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
     if (!app.ws || app.ws.readyState !== 1) return reject(new Error('Not connected to your PC.'));
     const reqId = ++app.reqSeq;
@@ -88,7 +93,7 @@ function request(msg) {
     app.ws.send(JSON.stringify({ ...msg, reqId }));
     setTimeout(() => {
       if (app.pending.delete(reqId)) reject(new Error('Your PC didn’t answer. Try again.'));
-    }, 5000);
+    }, timeoutMs);
   });
 }
 
@@ -99,9 +104,9 @@ function settle(msg) {
   if (msg.ok) p.resolve(msg.data); else p.reject(new Error(msg.error || 'That didn’t work.'));
 }
 
-async function send(msg) {
+async function send(msg, timeoutMs) {
   try {
-    return await request(msg);
+    return await request(msg, timeoutMs);
   } catch (err) {
     toast(err.message, 'error');
     throw err;
@@ -123,7 +128,9 @@ function el(tag, attrs = {}, ...children) {
 }
 
 function show(which) {
-  for (const id of ['unpaired', 'rejected', 'idle', 'noMods', 'mods']) $(id).hidden = id !== which;
+  for (const id of ['unpaired', 'rejected', 'idle', 'noMods', 'main']) $(id).hidden = id !== which;
+  $('tabs').hidden = which !== 'main';
+  document.body.classList.toggle('has-tabs', which === 'main');
 }
 
 function setConn(kind, text) {
@@ -143,21 +150,52 @@ function render() {
   if (!s || !s.attached) {
     $('game').textContent = 'Keystone';
     closeSheet();
+    if (window.PhoneMap) PhoneMap.update(null);
+    if (window.PhoneLib) PhoneLib.update(null);
     return show('idle');
   }
   $('game').textContent = s.displayName || (s.game.name === 'demo.exe' ? 'Demo game' : s.game.name.replace(/\.exe$/i, ''));
-  // Teleport can work without mods (games with a teleport command), so a
-  // game with waypoints still gets a screen.
-  const tp = s.teleport && s.teleport.waypoints.length ? s.teleport : null;
-  if (!s.records.length && !tp && !(s.timers || []).length && !s.checklist) return show('noMods');
-  show('mods');
+  // Which tabs have something in them. The map works without mods (online
+  // games still get the map, markers and "I'm here").
+  const has = {
+    mods: s.records.length > 0,
+    map: Boolean(s.map),
+    library: Boolean(s.library),
+    tools: Boolean(s.hasCommands || s.identify || (s.timers || []).length || (s.timerPresets || []).length || s.checklist),
+  };
+  const tabs = TABS.filter((t) => has[t]);
+  if (!tabs.length) return show('noMods');
+  show('main');
+  // A tab picked on this phone sticks; otherwise the first one with content.
+  let saved = null;
+  try { saved = localStorage.getItem(TAB_KEY); } catch { /* storage blocked */ }
+  if (!tabs.includes(app.tab)) app.tab = tabs.includes(saved) ? saved : tabs[0];
+  for (const t of TABS) {
+    $(`tab${t[0].toUpperCase()}${t.slice(1)}`).hidden = !has[t];
+    $(`tab${t[0].toUpperCase()}${t.slice(1)}`).classList.toggle('on', t === app.tab);
+    $(`pane${t[0].toUpperCase()}${t.slice(1)}`).hidden = t !== app.tab;
+  }
+  // One tab: the bar would only label the page, so it goes.
+  $('tabs').hidden = tabs.length < 2;
+  document.body.classList.toggle('has-tabs', tabs.length >= 2);
   renderProfiles();
   renderList();
-  renderTimers(s.timers || []);
-  renderChecklist(s.checklist);
-  renderTeleport(tp);
+  renderIdentify(s.identify);
+  renderTimers(s.timers || [], s.timerPresets || []);
+  renderChecklist(s.checklist, s.checklists || []);
+  if (window.PhoneMap) PhoneMap.update(s.map, app.tab === 'map');
+  if (window.PhoneLib) PhoneLib.update(s, app.tab === 'library');
+  if (window.PhoneCommands) PhoneCommands.update(s, app.tab === 'tools');
   if (app.sheetId) fillSheet();
 }
+
+function setTab(tab) {
+  app.tab = tab;
+  try { localStorage.setItem(TAB_KEY, tab); } catch { /* fine */ }
+  window.scrollTo(0, 0);
+  render();
+}
+for (const b of document.querySelectorAll('.tab')) b.addEventListener('click', () => setTab(b.dataset.tab));
 
 function renderProfiles() {
   const p = app.snapshot.profiles;
@@ -236,9 +274,38 @@ function fmtLeft(ms) {
   return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
 }
 
+// The identifier: tap evidence to cycle found / ruled out / not checked.
+function renderIdentify(id) {
+  $('identSec').hidden = !id;
+  if (!id) return;
+  $('identTitle').textContent = id.title;
+  $('identEv').replaceChildren(...id.traits.map((t) => {
+    const mark = id.marks[t.id];
+    const b = el('button', { class: `ev ${mark || ''}${id.useful.includes(t.id) ? ' useful' : ''}` }, el('span', { class: 'm', text: mark === 'found' ? '\u2713' : mark === 'out' ? '\u2715' : '' }), el('span', { text: t.name }));
+    b.addEventListener('click', () => send({ type: 'identify', action: 'cycle', trait: t.id }).catch(() => {}));
+    return b;
+  }));
+  $('identLeft').textContent = id.left.length === 1 ? `It's the ${id.left[0].name}.`
+    : id.left.length === 0 ? 'Nothing fits. Check the evidence setting.'
+      : id.left.length <= 12 ? id.left.map((g) => g.name).join(', ') : `${id.left.length} of ${id.total} possible`;
+  $('identLeft').classList.toggle('solved', id.left.length === 1);
+  const sel = $('identGiven');
+  if (document.activeElement !== sel) {
+    sel.replaceChildren(...id.givenOptions.map((o) => el('option', { value: String(o.value), text: o.label })));
+    sel.value = String(id.given);
+  }
+}
+$('identGiven').addEventListener('change', (e) => send({ type: 'identify', action: 'given', value: Number(e.target.value) }).catch(() => {}));
+$('identReset').addEventListener('click', () => send({ type: 'identify', action: 'reset' }).catch(() => {}));
+
 const timerEls = new Map();
-function renderTimers(timers) {
-  $('timersSec').hidden = !timers.length;
+function renderTimers(timers, presets = []) {
+  $('timersSec').hidden = !timers.length && !presets.length;
+  $('presetRow').replaceChildren(...presets.map((name, index) => {
+    const b = el('button', { class: 'btn small', text: name });
+    b.addEventListener('click', () => send({ type: 'timerPreset', index }).then(() => toast(`${name} started.`), () => {}));
+    return b;
+  }));
   timerEls.clear();
   $('timerRows').replaceChildren(...timers.map((t) => {
     const left = el('span', { class: 'row-value' });
@@ -263,10 +330,19 @@ function paintTimers() {
 }
 setInterval(paintTimers, 500);
 
-function renderChecklist(list) {
+function renderChecklist(list, all = []) {
   $('listSec').hidden = !list;
   if (!list) return;
-  $('listName').textContent = `${list.name}  ${list.items.filter((i) => i.done).length}/${list.items.length}`;
+  // With a picker, the picker names the list (and its count).
+  $('listName').textContent = all.length >= 2 ? 'Checklists' : `${list.name}  ${list.items.filter((i) => i.done).length}/${list.items.length}`;
+  // Several lists: pick one. The choice is shared with the overlay, like on
+  // the PC, so what you tick here is what the overlay shows.
+  $('listPickRow').hidden = all.length < 2;
+  const sel = $('listPick');
+  if (all.length >= 2 && document.activeElement !== sel) {
+    sel.replaceChildren(...all.map((l) => el('option', { value: l.id, text: `${l.name} (${l.done}/${l.total})` })));
+    sel.value = list.id;
+  }
   $('listRows').replaceChildren(...list.items.map((i) => {
     const cb = el('input', { type: 'checkbox', 'aria-label': i.text });
     cb.checked = i.done;
@@ -274,22 +350,6 @@ function renderChecklist(list) {
       try { await send({ type: 'check', listId: list.id, itemId: i.id }); } catch { cb.checked = !cb.checked; }
     });
     return el('label', { class: `row check-row${i.done ? ' done' : ''}` }, cb, el('span', { class: 'row-name', text: i.text }));
-  }));
-}
-
-function renderTeleport(tp) {
-  $('teleport').hidden = !tp;
-  if (!tp) return;
-  $('tpList').replaceChildren(...tp.waypoints.map((w) => {
-    const go = el('button', { class: 'btn primary apply-btn', text: 'Go', 'aria-label': `Teleport to ${w.name}` });
-    go.addEventListener('click', async () => {
-      go.disabled = true;
-      try { await send({ type: 'teleport', waypointId: w.id }); toast(`Teleported to ${w.name}.`); } catch { /* toast already shown */ }
-      go.disabled = false;
-    });
-    const main = el('div', { class: 'row-main' }, el('span', { class: 'row-name', text: w.name }));
-    if (w.id === tp.tracked) main.append(el('span', { class: 'row-value', text: 'Tracked' }));
-    return el('div', { class: `row${w.id === tp.tracked ? ' tracked' : ''}` }, main, go);
   }));
 }
 
@@ -310,6 +370,8 @@ function patchValues(vals) {
   }
   if (app.sheetId && vals[app.sheetId]) paintSheetCurrent();
 }
+
+$('listPick').addEventListener('change', (e) => send({ type: 'setActiveList', id: e.target.value }).catch(() => {}));
 
 // ---------- edit sheet ----------
 function sheetRecord() {

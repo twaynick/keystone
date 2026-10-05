@@ -14,6 +14,7 @@ const { CommandsModel } = require('./commands/model');
 const { LibraryModel } = require('./library');
 const hotkeys = require('./hotkeys');
 const { InstalledGames, launchFor } = require('./installed');
+const { IdentifyModel } = require('./identify');
 
 // Everything the app can do, independent of Electron. The desktop window
 // calls it over IPC; the phone remote calls the same methods, so both always
@@ -40,6 +41,7 @@ class Controller extends EventEmitter {
     this.overlay = new OverlayModel(this, { dataDir });
     this.commands = new CommandsModel(this, commands);
     this.library = new LibraryModel(this, { dataDir });
+    this.identify = new IdentifyModel(this);
     this.installed = new InstalledGames(installed);
   }
 
@@ -230,12 +232,14 @@ class Controller extends EventEmitter {
     try { return { game: pick.name, ...this.attach({ packId: pick.id }) }; } catch (err) { this._skipPid = pick.pid; throw err; }
   }
 
-  // How to start a game: the pack's own launch info, else the store it's
-  // installed from.
+  // How to start a game: through the store it's installed from, else the
+  // pack's own launch info. Installed copy first: a pack names one Steam
+  // app, but the player may own another edition (Fallout 3 vs its GOTY
+  // edition) or have it on GOG or Epic.
   async launchTarget(packId) {
     const p = this._packs().find((x) => x.id === packId);
-    if (p?.launch) return { kind: 'uri', uri: p.launch.uri };
     const hit = p ? (await this.installed.match([p])).get(p.id) : null;
+    if (!hit && p?.launch) return { kind: 'uri', uri: p.launch.uri };
     const t = launchFor(hit);
     if (!t) throw new Error('Keystone doesn\u2019t know how to start this game. Start it yourself and it\u2019ll be picked up.');
     return t;
@@ -545,9 +549,17 @@ class Controller extends EventEmitter {
       installed: (this.pack && this._installedHits?.get(this.pack.id)?.store) || null,
       displayName: this.game.demo ? 'Demo game' : (this.pack?.name || this.game.name.replace(/\.exe$/i, '')),
       hasCommands: Boolean(this.pack?.commands),
+      identify: this._identifyBrief(),
+      timerPresets: (this.pack?.timerPresets || []).map((t) => t.name),
       // Timers are app-wide; the checklist is the one the overlay shows.
       timers: this.timers ? this.timers.list() : [],
       checklist: this.overlay.activeList(),
+      // All the lists, for the phone's list picker.
+      checklists: this.overlay.checklists().map((l) => ({ id: l.id, name: l.name, total: l.items.length, done: l.items.filter((i) => i.done).length })),
+      // The phone's Map tab (marker points come separately).
+      map: this.overlay.phoneMap(),
+      // Whether the phone gets a Library tab.
+      library: Boolean(this.pack?.library),
       // For the phone's Teleport list.
       teleport: this.overlay.teleportMethod()
         ? { waypoints: this.overlay.waypoints().map((w) => ({ id: w.id, name: w.name })), tracked: this.store.load(this.game.key).overlay.tracked || null }
@@ -557,6 +569,17 @@ class Controller extends EventEmitter {
 
   values() {
     return this.session ? this.session.valuesSnapshot() : {};
+  }
+
+  // The identifier, trimmed for the phone and overlay.
+  _identifyBrief() {
+    const i = this.identify.info();
+    if (!i) return null;
+    return {
+      title: i.title, traits: i.traits, marks: i.marks, given: i.given, givenOptions: i.givenOptions,
+      left: i.candidates.filter((c) => c.possible).map((c) => ({ id: c.id, name: c.name })),
+      total: i.candidates.length, useful: i.useful,
+    };
   }
 
   shutdown() {

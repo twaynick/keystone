@@ -285,6 +285,8 @@ class CommandsModel {
       actions: (this.spec.actions || []).map(strip),
       quick: (this.spec.quick || []).map(strip),
       catalogs: Object.keys(this.spec.catalogs || {}),
+      // Catalogs with Library thumbnails, so the pickers can show them too.
+      thumbs: Object.keys(this.spec.catalogs || {}).filter((name) => this.c.library.pictures(name)?.thumb),
       settings: this.settings(),
       history: this.history(),
       credits: this.spec.credits || null,

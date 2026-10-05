@@ -91,6 +91,12 @@ function normalize(raw, folder, id) {
     maps: mapsOf(raw, folder),
     findMe: raw.findMe && typeof raw.findMe.command === 'string' && raw.findMe.command.trim()
       ? { command: raw.findMe.command.trim() } : null,
+    // One-tap timers for this game (timers.js), like incense in Phasmophobia.
+    timerPresets: (Array.isArray(raw.timerPresets) ? raw.timerPresets : [])
+      .filter((t) => t && t.name && (typeof t.duration === 'number' || typeof t.duration === 'string'))
+      .slice(0, 8).map((t) => ({ name: String(t.name).slice(0, 30), duration: t.duration })),
+    // "What is it?" tool (see identify.js).
+    identify: raw.identify && typeof raw.identify === 'object' && raw.identify.catalog && Array.isArray(raw.identify.traits) ? raw.identify : null,
     // Starter checklists, copied into the game's settings once (like
     // waypoints) so they can be ticked, edited and deleted.
     checklists: (Array.isArray(raw.checklists) ? raw.checklists : [])

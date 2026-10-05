@@ -1,0 +1,409 @@
+{
+  "name": "Fallout 3",
+  "exe": [
+    "Fallout3.exe"
+  ],
+  "art": {
+    "steamAppId": 22370
+  },
+  "info": [
+    {
+      "title": "Commands",
+      "body": "Open Commands on this game's page. Keystone opens the console with the ~ key, types the command, presses Enter and closes the console again."
+    },
+    {
+      "title": "DLC items",
+      "body": "The item list covers the base game. DLC item IDs depend on your load order; the Form IDs guide in the Library explains how to work them out."
+    },
+    {
+      "title": "Overlay",
+      "body": "Fallout 3 has no borderless mode of its own. Run it windowed (Fallout Launcher, Options) for the overlay and browser to show on top."
+    }
+  ],
+  "commands": {
+    "credits": "Item names, Form IDs and pictures from Nukapedia, the Fallout Wiki on Fandom (fallout.fandom.com), community-maintained. Base game only.",
+    "console": {
+      "key": "Backquote",
+      "prefixes": [
+        ""
+      ],
+      "keepsOpen": true,
+      "paste": false
+    },
+    "catalogs": {
+      "items": "items.json"
+    },
+    "actions": [
+      {
+        "id": "give-item",
+        "label": "Give to me",
+        "catalog": "items",
+        "template": "player.additem {id} {qty}",
+        "help": "Adds the item to your inventory.",
+        "fields": [
+          {
+            "key": "qty",
+            "label": "Quantity",
+            "type": "number",
+            "default": 1,
+            "min": 1,
+            "max": 100000
+          }
+        ]
+      },
+      {
+        "id": "drop-item",
+        "label": "Drop at my feet",
+        "catalog": "items",
+        "template": "player.placeatme {id} {qty}",
+        "help": "Places the item on the ground next to you.",
+        "fields": [
+          {
+            "key": "qty",
+            "label": "Quantity",
+            "type": "number",
+            "default": 1,
+            "min": 1,
+            "max": 100
+          }
+        ]
+      }
+    ],
+    "quick": [
+      {
+        "id": "tgm",
+        "label": "God mode",
+        "template": "tgm",
+        "help": "Toggles no damage, no radiation, unlimited ammo and Action Points, and no carry limit."
+      },
+      {
+        "id": "tcl",
+        "label": "No clip",
+        "template": "tcl",
+        "help": "Toggles walking through walls and flying."
+      },
+      {
+        "id": "tfc",
+        "label": "Free camera",
+        "template": "tfc",
+        "help": "Toggles a camera you can fly around, for screenshots."
+      },
+      {
+        "id": "tm",
+        "label": "Hide the HUD",
+        "template": "tm",
+        "help": "Toggles all on-screen menus. Run it again to bring them back."
+      },
+      {
+        "id": "tmm",
+        "label": "Show every map location",
+        "template": "tmm 1",
+        "help": "Reveals every map marker and makes them fast-travel points. This can't be undone in this save."
+      },
+      {
+        "id": "caps",
+        "label": "Give me caps",
+        "template": "player.additem 0000000F {amount}",
+        "fields": [
+          {
+            "key": "amount",
+            "label": "Caps",
+            "type": "number",
+            "default": 1000,
+            "min": 1,
+            "max": 1000000
+          }
+        ]
+      },
+      {
+        "id": "advlevel",
+        "label": "Level up once",
+        "template": "player.advlevel",
+        "help": "Takes you up one level, with the level-up screen. XP stays where it is."
+      },
+      {
+        "id": "level",
+        "label": "Set my level",
+        "template": "player.setlevel {level}",
+        "fields": [
+          {
+            "key": "level",
+            "label": "Level",
+            "type": "number",
+            "default": 20,
+            "min": 1,
+            "max": 30
+          }
+        ],
+        "help": "Fallout 3 caps at 20, or 30 with Broken Steel."
+      },
+      {
+        "id": "special",
+        "label": "Set a S.P.E.C.I.A.L. stat",
+        "template": "player.setav {stat} {value}",
+        "fields": [
+          {
+            "key": "stat",
+            "label": "Stat",
+            "type": "choice",
+            "options": [
+              {
+                "value": "strength",
+                "label": "Strength"
+              },
+              {
+                "value": "perception",
+                "label": "Perception"
+              },
+              {
+                "value": "endurance",
+                "label": "Endurance"
+              },
+              {
+                "value": "charisma",
+                "label": "Charisma"
+              },
+              {
+                "value": "intelligence",
+                "label": "Intelligence"
+              },
+              {
+                "value": "agility",
+                "label": "Agility"
+              },
+              {
+                "value": "luck",
+                "label": "Luck"
+              }
+            ]
+          },
+          {
+            "key": "value",
+            "label": "Value",
+            "type": "number",
+            "default": 10,
+            "min": 1,
+            "max": 10
+          }
+        ]
+      },
+      {
+        "id": "skill",
+        "label": "Set a skill",
+        "template": "player.setav {skill} {value}",
+        "fields": [
+          {
+            "key": "skill",
+            "label": "Skill",
+            "type": "choice",
+            "options": [
+              {
+                "value": "barter",
+                "label": "Barter"
+              },
+              {
+                "value": "bigguns",
+                "label": "Big Guns"
+              },
+              {
+                "value": "energyweapons",
+                "label": "Energy Weapons"
+              },
+              {
+                "value": "explosives",
+                "label": "Explosives"
+              },
+              {
+                "value": "lockpick",
+                "label": "Lockpick"
+              },
+              {
+                "value": "medicine",
+                "label": "Medicine"
+              },
+              {
+                "value": "meleeweapons",
+                "label": "Melee Weapons"
+              },
+              {
+                "value": "repair",
+                "label": "Repair"
+              },
+              {
+                "value": "science",
+                "label": "Science"
+              },
+              {
+                "value": "smallguns",
+                "label": "Small Guns"
+              },
+              {
+                "value": "sneak",
+                "label": "Sneak"
+              },
+              {
+                "value": "speech",
+                "label": "Speech"
+              },
+              {
+                "value": "unarmed",
+                "label": "Unarmed"
+              }
+            ]
+          },
+          {
+            "key": "value",
+            "label": "Value",
+            "type": "number",
+            "default": 100,
+            "min": 1,
+            "max": 100
+          }
+        ]
+      },
+      {
+        "id": "karma",
+        "label": "Change my Karma",
+        "template": "player.rewardKarma {amount}",
+        "help": "Use a negative number to lower it.",
+        "fields": [
+          {
+            "key": "amount",
+            "label": "Karma",
+            "type": "number",
+            "default": 500,
+            "min": -10000,
+            "max": 10000
+          }
+        ]
+      },
+      {
+        "id": "xp",
+        "label": "Give me XP",
+        "template": "player.rewardXP {amount}",
+        "fields": [
+          {
+            "key": "amount",
+            "label": "XP",
+            "type": "number",
+            "default": 1000,
+            "min": 1,
+            "max": 1000000
+          }
+        ]
+      },
+      {
+        "id": "carry",
+        "label": "Add carry weight",
+        "template": "player.modav carryweight {amount}",
+        "fields": [
+          {
+            "key": "amount",
+            "label": "Extra pounds",
+            "type": "number",
+            "default": 500,
+            "min": 1,
+            "max": 100000
+          }
+        ]
+      },
+      {
+        "id": "time",
+        "label": "Set time of day",
+        "template": "set gamehour to {hour}",
+        "fields": [
+          {
+            "key": "hour",
+            "label": "Hour (0 to 23)",
+            "type": "number",
+            "default": 12,
+            "min": 0,
+            "max": 23
+          }
+        ]
+      },
+      {
+        "id": "race",
+        "label": "Change my face",
+        "template": "showracemenu",
+        "help": "Opens the character editor. Changing race can remove perks; re-add them afterwards."
+      },
+      {
+        "id": "killall",
+        "label": "Kill everyone nearby",
+        "template": "killall",
+        "help": "Kills every non-essential character in the area.",
+        "confirm": "Kill every non-essential character nearby? Quest characters you can't see may be among them."
+      }
+    ]
+  },
+  "library": {
+    "sections": [
+      {
+        "id": "items",
+        "label": "Items",
+        "catalog": "items",
+        "idLabel": "Form ID"
+      }
+    ],
+    "guides": "guides",
+    "wiki": {
+      "label": "Fallout Wiki",
+      "base": "https://fallout.fandom.com"
+    },
+    "links": [
+      {
+        "label": "Fallout Wiki",
+        "url": "https://fallout.fandom.com/wiki/Fallout_3"
+      },
+      {
+        "label": "Nexus Mods",
+        "url": "https://www.nexusmods.com/fallout3"
+      }
+    ],
+    "images": {
+      "api": "https://fallout.fandom.com/api.php",
+      "credit": "Pictures from Nukapedia, the Fallout Wiki on Fandom",
+      "creditUrl": "https://fallout.fandom.com/",
+      "catalogs": {
+        "items": {
+          "thumb": [
+            "File:{img}",
+            "{page}"
+          ],
+          "hero": [
+            "File:{img}",
+            "{page}"
+          ]
+        }
+      }
+    }
+  },
+  "checklists": [
+    {
+      "name": "Bobbleheads",
+      "items": [
+        "Strength (Megaton)",
+        "Perception (Republic of Dave)",
+        "Endurance (Deathclaw sanctuary)",
+        "Charisma (Vault 108)",
+        "Intelligence (Rivet City)",
+        "Agility (Greener Pastures disposal site)",
+        "Luck (Arlington Cemetery North)",
+        "Barter (Evergreen Mills)",
+        "Big Guns (Fort Constantine)",
+        "Energy Weapons (Raven Rock)",
+        "Explosives (WKML Broadcast Station)",
+        "Lockpick (Bethesda ruins)",
+        "Medicine (Vault 101)",
+        "Melee Weapons (Dunwich Building)",
+        "Repair (Arefu)",
+        "Science (Vault 106)",
+        "Small Guns (National Guard depot)",
+        "Sneak (Yao guai tunnels)",
+        "Speech (Paradise Falls)",
+        "Unarmed (Rockopolis)"
+      ]
+    }
+  ]
+}

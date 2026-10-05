@@ -173,6 +173,7 @@ async function openGame(target) {
 }
 
 function defaultTab(snap) {
+  if (snap.identify && snap.modsBlocked) return 'library';
   if (snap.modsBlocked === 'online-only') return snap.hasCommands ? 'commands' : 'library';
   return 'mods';
 }
@@ -235,6 +236,8 @@ function render() {
     b.setAttribute('aria-pressed', String(b.dataset.tab === state.gameTab));
     // Mods tab disappears for games Keystone never mods.
     if (b.dataset.tab === 'mods') b.hidden = attached && snap.modsBlocked === 'online-only';
+    // A pack without commands (Phasmophobia has no console) gets no Commands tab.
+    if (b.dataset.tab === 'commands') b.hidden = attached && Boolean(snap.packId) && !snap.hasCommands;
   }
   $('modsPane').hidden = !isPane('mods');
   $('commandsView').hidden = !isPane('commands');
@@ -887,6 +890,7 @@ function renderOverlayData() {
   renderCrosshairBlock(d);
   for (const cb of document.querySelectorAll('[data-pc]')) cb.checked = Boolean(d.pcstats?.[cb.dataset.pc]);
   $('pcPicks').hidden = !d.panels.pcstats?.visible;
+  $('identPanelToggle').hidden = !d.identify;
   paintOverlayLive();
 }
 
@@ -963,6 +967,13 @@ function fmtLeft(ms) {
 }
 
 function renderTimerList(d) {
+  const presets = $('timerPresets');
+  presets.hidden = !(d.timerPresets || []).length;
+  presets.replaceChildren(el('span', { class: 'block-note', text: 'Start one now:' }), ...(d.timerPresets || []).map((name, i) => {
+    const b = el('button', { class: 'btn small', text: name });
+    b.addEventListener('click', () => call(keystone.startTimerPreset(i)));
+    return b;
+  }));
   const list = $('timerList');
   const timers = d.timers || [];
   if (!timers.length) { list.replaceChildren(el('p', { class: 'wp-empty', text: 'No timers yet.' })); return; }
@@ -1362,7 +1373,12 @@ function wireOverlay() {
   });
 
   keystone.onOverlayStatus((s) => { state.ovStatus = s; renderOverlayStatus(); });
-  keystone.onOverlayData((d) => { state.ovData = d; if (isPane('overlay')) renderOverlayData(); });
+  keystone.onOverlayData((d) => {
+    state.ovData = d;
+    if (isPane('overlay')) renderOverlayData();
+    // Evidence ticked on the phone shows here straight away.
+    if (isPane('library') && state.lib.page.kind === 'identify') renderIdentify($('libMain'), state.lib.page);
+  });
   keystone.onOverlayLive((v) => { state.ovLive = v; if (isPane('overlay')) paintOverlayLive(); });
 }
 
@@ -1506,15 +1522,30 @@ async function renderCatalog() {
   if (q) matches.sort((a, b) => rank(a.name, q) - rank(b.name, q) || a.name.localeCompare(b.name));
   const LIMIT = 240;
   $('catGrid').replaceChildren(...matches.slice(0, LIMIT).map((x) => {
-    const card = el('button', { class: 'cat-card', 'aria-pressed': String(x.id === c.selected) },
-      el('span', { class: 'cat-name', text: x.name }),
-      el('span', { class: 'cat-meta', text: [x.category, x.map].filter(Boolean).join(', ') }));
+    const card = catCard(name, x, (c.info.thumbs || []).includes(name), { 'aria-pressed': String(x.id === c.selected) });
     card.addEventListener('click', () => { c.selected = x.id; c.values = {}; renderCatalog(); });
     return card;
   }));
   $('catMore').textContent = !matches.length ? 'Nothing matches. Try a shorter search.'
     : matches.length > LIMIT ? `Showing ${LIMIT} of ${matches.length}. Search or filter to narrow it down.` : `${matches.length} shown.`;
   renderForm(list.find((x) => x.id === c.selected) || null);
+}
+
+// Wiki thumbnail for a catalog entry (kslib:// in main), or null when the
+// pack has none. A picture the wiki lacks just disappears.
+function thumbImg(catalog, id) {
+  const img = el('img', { class: 'cat-thumb', alt: '', loading: 'lazy', decoding: 'async', src: `kslib://thumb/${encodeURIComponent(catalog)}/${encodeURIComponent(id)}` });
+  img.addEventListener('error', () => img.classList.add('none'));
+  return img;
+}
+
+function catCard(catalog, x, withThumb, extra = {}, showId = false) {
+  // Code lists show the code itself on the card, so there's no need to open
+  // each one to read it.
+  const meta = showId ? el('span', { class: 'cat-meta' }, el('span', { text: `${x.category} \u00b7 ` }), el('code', { class: 'cat-code', text: x.id }))
+    : el('span', { class: 'cat-meta', text: [x.category, x.map].filter(Boolean).join(', ') });
+  const text = el('span', { class: 'cat-text' }, el('span', { class: 'cat-name', text: x.name }), meta);
+  return el('button', { class: `cat-card${withThumb ? ' has-thumb' : ''}`, ...extra }, withThumb ? thumbImg(catalog, x.id) : null, text);
 }
 
 function rank(name, q) {
@@ -1745,13 +1776,15 @@ function renderLibrary() {
     b.addEventListener('click', () => libGo(target));
     return b;
   };
-  nav.replaceChildren(
+  nav.replaceChildren(...[
     navBtn('Overview', { kind: 'home' }),
     info.sections.length ? el('h3', { text: 'Browse' }) : null,
     ...info.sections.map((sct) => navBtn(sct.label, { kind: 'section', catalog: sct.catalog, label: sct.label }, state.lib.entries[sct.catalog]?.length)),
+    info.tools?.length ? el('h3', { text: 'Tools' }) : null,
+    ...(info.tools || []).map((t) => navBtn(t.title, { kind: 'identify' })),
     el('h3', { text: 'Guides' }),
     navBtn('All guides', { kind: 'guides' }, info.guides.length),
-  );
+  ].filter(Boolean));
 
   $('libLinks').replaceChildren(...info.links.map((l) => {
     const a = el('a', { href: '#', text: l.label });
@@ -1767,6 +1800,7 @@ function renderLibrary() {
   else if (page.kind === 'entry') renderLibEntry(main, page);
   else if (page.kind === 'guide') renderLibGuide(main, page);
   else if (page.kind === 'search') renderLibSearch(main, page);
+  else if (page.kind === 'identify') renderIdentify(main, page);
 }
 
 function guideCard(g) {
@@ -1785,6 +1819,14 @@ function renderLibHome(main, info) {
     kids.push(el('div', { class: 'guide-cards' }, ...info.sections.map((sct) => {
       const card = el('button', { class: 'guide-card' }, el('span', { class: 'g-title', text: sct.label }), el('span', { class: 'g-sum', text: `Every ${sct.label.toLowerCase().replace(/s$/, '')} with its IDs, details and your notes.` }));
       card.addEventListener('click', () => libGo({ kind: 'section', catalog: sct.catalog, label: sct.label }));
+      return card;
+    })));
+  }
+  if (info.tools?.length) {
+    kids.push(el('div', { class: 'lib-section-head' }, el('h2', { text: 'Tools' })));
+    kids.push(el('div', { class: 'guide-cards' }, ...info.tools.map((t) => {
+      const card = el('button', { class: 'guide-card tool-card' }, el('span', { class: 'g-title', text: t.title }), el('span', { class: 'g-sum', text: 'Tick the evidence you find or rule out, and see what it could be. Also on your phone.' }));
+      card.addEventListener('click', () => libGo({ kind: 'identify' }));
       return card;
     })));
   }
@@ -1825,6 +1867,7 @@ async function renderLibSection(main, page) {
   const mapSel = el('select', { class: 'field' }, el('option', { value: '', text: 'All maps' }), ...maps.map((m) => el('option', { value: m, text: m })));
   mapSel.value = f.map;
   mapSel.hidden = !maps.length;
+  const sectionInfo = state.lib.info.sections.find((x) => x.catalog === page.catalog);
   const grid = el('div', { class: 'catalog-grid' });
   const more = el('p', { class: 'catalog-more' });
   const paint = () => {
@@ -1833,7 +1876,7 @@ async function renderLibSection(main, page) {
     if (q) m.sort((a, b) => rank(a.name, q) - rank(b.name, q) || a.name.localeCompare(b.name));
     const LIMIT = 300;
     grid.replaceChildren(...m.slice(0, LIMIT).map((x) => {
-      const card = el('button', { class: 'cat-card' }, el('span', { class: 'cat-name', text: x.name }), el('span', { class: 'cat-meta', text: [x.category, x.map].filter(Boolean).join(', ') }));
+      const card = catCard(page.catalog, x, Boolean(sectionInfo?.pictures?.thumb), {}, sectionInfo?.idLabel === 'Code');
       card.addEventListener('click', () => libGo({ kind: 'entry', catalog: page.catalog, id: x.id, back: page }));
       return card;
     }));
@@ -1862,8 +1905,14 @@ async function renderLibEntry(main, page) {
   if (e.map) add('Map', el('span', { text: e.map }));
   if (e.stack) add('Stack size', el('span', { text: String(e.stack) }));
   const section = state.lib.info.sections.find((x) => x.catalog === page.catalog);
-  add(section?.idLabel || 'ID', [el('code', { text: e.id }), copyBtn(e.id)]);
+  // Catalogs used by commands show their IDs; reference-only ones (no
+  // commands use them) don't need a made-up ID on show.
+  if (e.commandActions.length || section?.idLabel !== 'ID') add(section?.idLabel || 'ID', [el('code', { text: e.id }), copyBtn(e.id)]);
   if (e.blueprint) add('Blueprint', [el('code', { text: e.blueprint }), copyBtn(e.blueprint)]);
+  // Pack-provided details (evidence, price, what it does...).
+  for (const [label, value] of Array.isArray(e.facts) ? e.facts : []) add(String(label), el('span', { text: String(value) }));
+  const lists = (Array.isArray(e.lists) ? e.lists : []).filter(([, items]) => Array.isArray(items) && items.length)
+    .map(([label, items]) => el('section', { class: 'block entry-list' }, el('h2', { text: String(label) }), el('ul', {}, ...items.map((t) => el('li', { text: String(t) })))));
 
   const actions = e.commandActions.map((a) => {
     const b = el('button', { class: 'btn primary', text: a.label });
@@ -1880,13 +1929,124 @@ async function renderLibEntry(main, page) {
   let t;
   note.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => call(keystone.setLibraryNote(page.catalog, e.id, note.value)), 500); });
 
-  main.replaceChildren(
+  const pics = e.pictures;
+  let figure = null;
+  if (pics?.hero) {
+    const img = el('img', { alt: e.name, decoding: 'async', src: `kslib://hero/${encodeURIComponent(page.catalog)}/${encodeURIComponent(e.id)}` });
+    figure = el('figure', { class: 'entry-hero loading' }, img);
+    img.addEventListener('load', () => figure.classList.remove('loading'));
+    img.addEventListener('error', () => figure.remove());
+  }
+  // replaceChildren() would print a null as the text "null".
+  main.replaceChildren(...[
     back,
     el('h1', { text: e.name }),
+    figure,
     el('dl', { class: 'entry-grid' }, ...rows),
     actions.length ? el('div', { class: 'entry-actions' }, ...actions) : null,
+    ...lists,
+    pics?.spawnMaps?.length ? spawnSection(page.catalog, e, pics) : null,
     el('section', { class: 'block' }, el('h2', { text: 'My notes' }), note),
-  );
+    pics?.credit ? creditLine(pics) : null,
+  ].filter(Boolean));
+}
+
+function creditLine(pics) {
+  const p = el('p', { class: 'pic-credit', text: `${pics.credit}.` });
+  if (pics.creditUrl) {
+    const a = el('a', { href: '#', text: ' Visit the wiki' });
+    a.addEventListener('click', (ev) => { ev.preventDefault(); call(keystone.openBrowser(pics.creditUrl)); });
+    p.append(a);
+  }
+  return p;
+}
+
+// Where a creature spawns, one tab per map. Which maps it's on isn't known
+// up front: every map's overlay is requested, and the tabs that load stay.
+function spawnSection(catalog, e, pics) {
+  const q = (part, i) => `kslib://${part}/${i}/${encodeURIComponent(catalog)}/${encodeURIComponent(e.id)}`;
+  const tabs = el('div', { class: 'cat-tabs spawn-tabs', role: 'tablist' });
+  const base = el('img', { alt: '', class: 'spawn-base' });
+  const over = el('img', { alt: '', class: 'spawn-over' });
+  const stage = el('div', { class: 'spawn-stage' }, base, over);
+  const section = el('section', { class: 'block spawn-block', hidden: '' },
+    el('h2', { text: 'Where it spawns' }), tabs, stage,
+    el('div', { class: 'spawn-legend' }, ...[['#0F0', 'Very common'], ['#B2FF00', 'Common'], ['#FF0', 'Uncommon'], ['#FC0', 'Very uncommon'], ['#F60', 'Rare'], ['#F00', 'Very rare']].map(([c, t]) => {
+      const sw = el('span', { class: 'sw' });
+      sw.style.background = c;
+      return el('span', {}, sw, el('span', { text: t }));
+    })),
+    el('p', { class: 'block-note', text: 'Spawn maps come from the ARK Wiki and may show the original ARK: Survival Evolved layout for remade maps.' }));
+  const found = [];
+  const show = (i) => {
+    base.src = q('spawnmap', i);
+    over.src = q('spawn', i);
+    for (const b of tabs.children) b.setAttribute('aria-pressed', String(Number(b.dataset.i) === i));
+  };
+  for (const m of pics.spawnMaps) {
+    const probe = new Image();
+    probe.onload = () => {
+      found.push(m.index);
+      const b = el('button', { 'data-i': String(m.index), text: m.name });
+      b.addEventListener('click', () => show(m.index));
+      // Keep the pack's map order, not the order the probes answered in.
+      const after = [...tabs.children].find((x) => Number(x.dataset.i) > m.index);
+      tabs.insertBefore(b, after || null);
+      if (section.hidden || m.index < Math.min(...found.filter((i) => i !== m.index))) { section.hidden = false; show(m.index); }
+    };
+    probe.src = q('spawn', m.index);
+  }
+  return section;
+}
+
+// ---------- identifier ----------
+const MARK_TEXT = { found: 'Found', out: 'Ruled out' };
+
+async function renderIdentify(main, page) {
+  const info = await call(keystone.identifyInfo());
+  if (!info || state.lib.page !== page) return;
+  paintIdentify(main, info);
+}
+
+function paintIdentify(main, info) {
+  const redraw = async (p) => { const next = await call(p); if (next && state.lib.page.kind === 'identify') paintIdentify(main, next); };
+  const evButtons = info.traits.map((t) => {
+    const mark = info.marks[t.id] || null;
+    const b = el('button', { class: `ev-btn ${mark || 'none'}${info.useful.includes(t.id) ? ' useful' : ''}`, title: 'Click: found, again: ruled out, again: not checked' },
+      el('span', { class: 'ev-mark', text: mark === 'found' ? '\u2713' : mark === 'out' ? '\u2715' : '' }),
+      el('span', { class: 'ev-name', text: t.name }),
+      el('span', { class: 'ev-state', text: MARK_TEXT[mark] || (info.useful.includes(t.id) ? 'Worth checking' : '') }));
+    b.addEventListener('click', () => redraw(keystone.identifyCycle(t.id)));
+    return b;
+  });
+  const given = el('select', { class: 'field' }, ...info.givenOptions.map((o) => el('option', { value: String(o.value), text: o.label })));
+  given.value = String(info.given);
+  given.addEventListener('change', () => redraw(keystone.identifyGiven(Number(given.value))));
+  const reset = el('button', { class: 'btn small', text: 'New contract' });
+  reset.addEventListener('click', () => redraw(keystone.identifyReset()));
+
+  const left = info.candidates.filter((c) => c.possible);
+  const out = info.candidates.filter((c) => !c.possible);
+  const name = (id) => info.traits.find((t) => t.id === id)?.name || id;
+  const card = (c) => {
+    const ev = el('span', { class: 'gh-ev' }, ...c.traits.map((t) => el('span', { class: `chip ${info.marks[t] || ''}${c.forced.includes(t) ? ' forced' : ''}`, text: name(t), title: c.forced.includes(t) ? 'Always shown, even when fewer pieces are given' : '' })));
+    const b = el('div', { class: `gh-card${c.possible ? '' : ' out'}` },
+      el('button', { class: 'gh-main', title: 'Open its page' }, el('span', { class: 'gh-name', text: c.name }), ev, c.possible ? null : el('span', { class: 'gh-why', text: c.why })));
+    b.querySelector('.gh-main').addEventListener('click', () => libGo({ kind: 'entry', catalog: info.catalog, id: c.id, back: { kind: 'identify', label: info.title } }));
+    const strike = el('button', { class: 'btn small ghost', text: info.struck.includes(c.id) ? 'Bring back' : 'Rule out', title: 'For behaviour that rules it out, like a hunt speed or a ghost event' });
+    strike.addEventListener('click', () => redraw(keystone.identifyStrike(c.id)));
+    if (c.possible || info.struck.includes(c.id)) b.append(strike);
+    return b;
+  };
+  const verdict = left.length === 1 ? `It\u2019s the ${left[0].name}.` : left.length === 0 ? 'Nothing fits. Check what you\u2019ve marked, or the evidence setting.' : `${left.length} of ${info.candidates.length} still possible.`;
+  main.replaceChildren(...[
+    el('h1', { text: info.title }),
+    el('div', { class: 'ident-bar' }, el('label', { class: 'inline-field' }, el('span', { text: info.givenLabel }), given), reset),
+    el('div', { class: 'ev-grid' }, ...evButtons),
+    el('p', { class: `ident-verdict${left.length === 1 ? ' solved' : ''}`, text: verdict }),
+    el('div', { class: 'gh-grid' }, ...left.map(card)),
+    out.length ? el('details', { class: 'gh-out' }, el('summary', { text: `Ruled out (${out.length})` }), el('div', { class: 'gh-grid' }, ...out.map(card))) : null,
+  ].filter(Boolean));
 }
 
 // Jumps to Commands with this entry picked and the chosen action selected.

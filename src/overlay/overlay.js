@@ -68,7 +68,7 @@ function flash(text, ms = 2200) {
 // ---------- panels ----------
 function placePanels() {
   const st = ov.state;
-  for (const id of ['readouts', 'minimap', 'info', 'mods', 'timers', 'checklist', 'pcstats']) {
+  for (const id of ['readouts', 'minimap', 'info', 'mods', 'timers', 'checklist', 'pcstats', 'identify']) {
     const panel = $(`panel-${id}`);
     const conf = st.panels?.[id];
     const hasContent = id === 'readouts' ? st.readouts?.length > 0 || ov.editing
@@ -76,6 +76,7 @@ function placePanels() {
       : id === 'mods' ? st.mods?.length > 0
       : id === 'timers' ? st.timers?.length > 0
       : id === 'checklist' ? Boolean(st.checklist)
+      : id === 'identify' ? Boolean(st.identify)
       : true;
     panel.hidden = !st.attached || !conf?.visible || !hasContent;
     if (!panel.hidden && !panel.classList.contains('dragging')) {
@@ -174,6 +175,22 @@ function paintTimers() {
     const left = t.state === 'running' ? t.endsAt - now : t.remainingMs;
     li.querySelector('.left').textContent = t.state === 'done' ? 'Done' : fmtLeft(left);
   }
+}
+
+// ---------- identifier ----------
+function renderIdentify() {
+  const id = ov.state.identify;
+  if (!id) return;
+  $('identTitle').textContent = id.title;
+  $('identCount').textContent = `${id.left.length}/${id.total}`;
+  const marked = id.traits.filter((t) => id.marks[t.id]);
+  $('identChips').replaceChildren(...(marked.length ? marked : []).map((t) => el('span', { class: id.marks[t.id], text: t.name })));
+  const left = $('identLeft');
+  left.classList.toggle('solved', id.left.length === 1);
+  left.textContent = id.left.length === 1 ? `It's the ${id.left[0].name}.`
+    : id.left.length === 0 ? 'Nothing fits. Check the evidence setting.'
+      : !marked.length ? 'Tick evidence on your phone or in Keystone.'
+        : id.left.length <= 10 ? id.left.map((g) => g.name).join(', ') : `${id.left.length} possible`;
 }
 
 // ---------- crosshair ----------
@@ -610,6 +627,7 @@ overlayApi.onState((st) => {
   renderTimers();
   renderChecklist();
   renderCrosshair();
+  renderIdentify();
   paintPc();
 });
 overlayApi.onPc((s) => { pc = s; paintPc(); });

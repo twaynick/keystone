@@ -125,6 +125,16 @@ class Timers extends EventEmitter {
     return this.list().find((x) => x.id === id);
   }
 
+  // A pack's one-tap timer: starts it, restarting it if it's already there
+  // (lighting a second incense starts the count again).
+  startPreset({ name, duration }) {
+    const n = cleanName(name);
+    let t = this._list.find((x) => x.name === n);
+    if (!t) t = this._get(this.add({ name: n, duration }).id);
+    Object.assign(t, { endsAt: null, pausedLeft: null, doneAt: null });
+    return this.start(t.id);
+  }
+
   // Start/pause in one, for a single button or hotkey.
   toggle(id) {
     return this._get(id).endsAt ? this.pause(id) : this.start(id);

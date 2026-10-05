@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { Marked } = require('marked');
+const { LibraryImages, candidates, spawnCandidates, SIZES } = require('./library-images');
 
 // The Library: per-game knowledge pages.
 //
@@ -17,7 +18,8 @@ const { Marked } = require('marked');
 //     "sections": [{ "id": "creatures", "label": "Creatures", "catalog": "creatures" }, ...],
 //     "guides": "guides",
 //     "wiki": { "label": "ARK Wiki", "page": "https://ark.wiki.gg/wiki/{name}" },
-//     "links": [{ "label": "...", "url": "https://..." }]
+//     "links": [{ "label": "...", "url": "https://..." }],
+//     "images": { ... }   // pictures from the wiki, see library-images.js
 //   }
 
 const MAX_NOTE = 4000;
@@ -47,6 +49,53 @@ class LibraryModel {
   constructor(controller, { dataDir }) {
     this.c = controller;
     this.guidesRoot = path.join(dataDir, 'guides');
+    // LibraryImages instance, set by main (it downloads with Electron's net).
+    this.images = null;
+  }
+
+  // ---------- pictures ----------
+  _imgSpec() {
+    const s = this.spec?.images;
+    return this.images && LibraryImages.valid(s) ? s : null;
+  }
+
+  // What pictures a catalog has, for the renderer to decide what to show.
+  pictures(catalog) {
+    const s = this._imgSpec();
+    const c = s?.catalogs?.[catalog];
+    if (!c) return null;
+    return {
+      thumb: Array.isArray(c.thumb) && c.thumb.length > 0,
+      hero: Array.isArray(c.hero) && c.hero.length > 0,
+      spawnMaps: c.spawnMaps ? (s.spawnMaps || []).map((m, index) => ({ index, name: String(m.name) })) : [],
+      credit: s.credit ? String(s.credit) : null,
+      creditUrl: /^https:\/\//.test(s.creditUrl || '') ? s.creditUrl : null,
+    };
+  }
+
+  _entry(catalog, id) {
+    const e = this._catalog(catalog).find((x) => x.id === id);
+    if (!e) throw new Error('That entry isn\u2019t in the list.');
+    return e;
+  }
+
+  _entryName(catalog, id) {
+    return this._entry(catalog, id).name;
+  }
+
+  // Local file for kslib:// requests, or null.
+  async pictureFile(kind, catalog, id) {
+    const s = this._imgSpec();
+    if (!s || !['thumb', 'hero'].includes(kind) || !this.c.game) return null;
+    return this.images.first(s, candidates(s, catalog, kind, this._entry(catalog, id)), SIZES[kind]);
+  }
+
+  async spawnFile(part, index, catalog, id) {
+    const s = this._imgSpec();
+    const m = s?.spawnMaps?.[index];
+    if (!m || !this.c.game || !s.catalogs?.[catalog]?.spawnMaps) return null;
+    if (part === 'map') return this.images.file(s, String(m.map).replace(/ /g, '_'), SIZES.map);
+    return this.images.first(s, spawnCandidates(s, index, this._entryName(catalog, id)), null);
   }
 
   get pack() { return this.c.pack; }
@@ -70,10 +119,11 @@ class LibraryModel {
     return {
       available: true,
       game: this.c.snapshot().displayName,
-      sections: sections.map((s) => ({ id: s.id, label: s.label, catalog: s.catalog, idLabel: s.idLabel || 'ID' })),
+      sections: sections.map((s) => ({ id: s.id, label: s.label, catalog: s.catalog, idLabel: s.idLabel || 'ID', pictures: this.pictures(s.catalog) })),
       guides: this.guideList(),
       wiki: spec.wiki ? { label: spec.wiki.label } : null,
       links: (spec.links || []).filter((l) => /^https:\/\//.test(l.url)),
+      tools: this.c.identify?.spec ? [{ id: 'identify', title: String(this.c.identify.spec.title || 'Identifier') }] : [],
       userGuidesDir: this.userGuidesDir(),
     };
   }
@@ -104,6 +154,7 @@ class LibraryModel {
     return {
       ...e,
       catalog,
+      pictures: this.pictures(catalog),
       wikiUrl: this._wikiUrl(e),
       note: notes[`${catalog}:${id}`] || '',
       commandActions,

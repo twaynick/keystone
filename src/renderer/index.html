@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: ksmap: ksart:; style-src 'self'; font-src 'self'; script-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: ksmap: ksart: kslib:; style-src 'self'; font-src 'self'; script-src 'self'">
   <title>Keystone</title>
   <link rel="stylesheet" href="../shared/base.css">
   <link rel="stylesheet" href="styles.css">
@@ -375,6 +375,7 @@
           <section class="block">
             <h2>Timers</h2>
             <p class="block-note">Countdowns in the overlay, with a chime and a Windows notification when they run out. They keep counting when you switch games or close Keystone. Click one in the overlay while editing the layout to start or pause it, or use your phone.</p>
+            <div class="timer-presets" id="timerPresets" hidden></div>
             <form class="timer-add" id="timerForm" autocomplete="off">
               <input class="field" id="timerName" placeholder="Name, like Egg hatch" maxlength="30" aria-label="Timer name">
               <input class="field" id="timerLen" placeholder="15m, 1h 30m or 2:30" aria-label="How long">
@@ -438,6 +439,7 @@
                 <label class="check"><input type="checkbox" data-panel="timers"> Timers</label>
                 <label class="check"><input type="checkbox" data-panel="checklist"> Checklist</label>
                 <label class="check"><input type="checkbox" data-panel="pcstats"> PC stats</label>
+                <label class="check" id="identPanelToggle"><input type="checkbox" data-panel="identify"> Identifier</label>
               </div>
               <div class="pc-picks" id="pcPicks">
                 <span class="block-note">PC stats shows:</span>
@@ -509,8 +511,8 @@
       <section class="phone" id="phoneView" hidden>
         <header class="phone-head">
           <div>
-            <h1>Control mods from your phone</h1>
-            <p>Your phone gets the same switches as this window, over your home Wi-Fi. Nothing leaves your network.</p>
+            <h1>Your phone as a second screen</h1>
+            <p>Mods, the map with your waypoints and position, the Library, commands, timers and checklists on your phone, over your home Wi-Fi. Nothing leaves your network.</p>
           </div>
           <label class="phone-enable">
             <span>Allow phone control</span>

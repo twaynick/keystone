@@ -123,7 +123,8 @@ test('art cache: pack files stay inside the pack, Steam art downloads once and c
   assert.equal(calls.length, 1, 'cached after that');
 
   assert.equal(await cache.file(fo4, 'hero'), null);
+  assert.match(calls[2], /IStoreBrowseService/, 'a 404 asks the store API once');
   await cache.file(fo4, 'hero');
-  assert.equal(calls.length, 2, 'a missing hero is remembered, not re-requested');
+  assert.equal(calls.length, 3, 'a missing hero is remembered, not re-requested');
   assert.equal(await cache.file(fo4, 'thumbnail'), null);
 });

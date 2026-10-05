@@ -1,0 +1,131 @@
+{
+  "name": "Far Cry 5",
+  "exe": [
+    "FarCry5.exe"
+  ],
+  "art": {
+    "steamAppId": 552520
+  },
+  "offlineOnly": true,
+  "offlineNote": "Far Cry 5 has online co-op and Arcade. Use mods only in single-player, offline, never in co-op or Arcade. Ubisoft can ban accounts for cheating in online play.",
+  "info": [
+    {
+      "title": "Library",
+      "body": "Weapons, vehicles and wildlife in Far Cry 5, with pictures and links to the Far Cry Wiki."
+    },
+    {
+      "title": "Overlay",
+      "body": "Set the game to borderless or windowed (Display options) for the overlay and Keystone's browser to show on top."
+    }
+  ],
+  "library": {
+    "catalogs": {
+      "weapons": "weapons.json",
+      "vehicles": "vehicles.json",
+      "animals": "animals.json"
+    },
+    "sections": [
+      {
+        "id": "weapons",
+        "label": "Weapons",
+        "catalog": "weapons",
+        "idLabel": "ID"
+      },
+      {
+        "id": "vehicles",
+        "label": "Vehicles",
+        "catalog": "vehicles",
+        "idLabel": "ID"
+      },
+      {
+        "id": "animals",
+        "label": "Animals",
+        "catalog": "animals",
+        "idLabel": "ID"
+      }
+    ],
+    "guides": "guides",
+    "wiki": {
+      "label": "Far Cry Wiki",
+      "base": "https://farcry.fandom.com"
+    },
+    "links": [
+      {
+        "label": "Far Cry Wiki",
+        "url": "https://farcry.fandom.com/wiki/Far_Cry_5"
+      }
+    ],
+    "images": {
+      "api": "https://farcry.fandom.com/api.php",
+      "credit": "Pictures from the Far Cry Wiki on Fandom",
+      "creditUrl": "https://farcry.fandom.com/",
+      "catalogs": {
+        "weapons": {
+          "thumb": [
+            "{page}",
+            "{name}"
+          ],
+          "hero": [
+            "{page}",
+            "{name}"
+          ]
+        },
+        "vehicles": {
+          "thumb": [
+            "{page}",
+            "{name}"
+          ],
+          "hero": [
+            "{page}",
+            "{name}"
+          ]
+        },
+        "animals": {
+          "thumb": [
+            "{page}",
+            "{name}"
+          ],
+          "hero": [
+            "{page}",
+            "{name}"
+          ]
+        }
+      }
+    }
+  },
+  "checklists": [
+    {
+      "name": "Prepper Stashes",
+      "items": [
+        "Animal Control",
+        "Cliffhanger",
+        "Dead Man's Treasure",
+        "Deep Dive",
+        "DIY and DOA",
+        "Dumpster Diving",
+        "Fire in the Hole",
+        "Foxhole",
+        "Getaway",
+        "Gone Squatchin'",
+        "Hanger Pains",
+        "High Tension",
+        "Long Range Lockpick",
+        "Man Cave",
+        "Mayday",
+        "O'Hara's Haunted House",
+        "Overwatch",
+        "Playing With Fire",
+        "Pooper Scooper",
+        "Salvage Rites",
+        "Shipwreck",
+        "Side Effects",
+        "Sunken Funds",
+        "Swingers",
+        "The Angel's Grave",
+        "The Holdouts",
+        "Unwelcome Guest",
+        "Vespiary"
+      ]
+    }
+  ]
+}

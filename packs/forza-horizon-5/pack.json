@@ -1,0 +1,87 @@
+{
+  "name": "Forza Horizon 5",
+  "exe": [
+    "ForzaHorizon5.exe"
+  ],
+  "art": {
+    "steamAppId": 1551360
+  },
+  "offlineOnly": true,
+  "offlineNote": "Forza Horizon 5 saves your progress to your Xbox profile and syncs it whenever you're online, so anything a mod changes (credits, cars, XP, Wheelspins) goes with you into online play, including if you modded in Solo or offline. Playground Games bans accounts it finds cheating. Use mods only playing offline, and only on progress you're prepared to lose.",
+  "info": [
+    {
+      "title": "Library",
+      "body": "Every car in Forza Horizon 5 (903) by make, with its class, value, how to get it and stats, pictures, and links to the Forza Wiki."
+    },
+    {
+      "title": "Overlay",
+      "body": "Set Display mode to Windowed or Borderless (Video options) for the overlay and Keystone's browser to show on top."
+    }
+  ],
+  "library": {
+    "catalogs": {
+      "cars": "cars.json"
+    },
+    "sections": [
+      {
+        "id": "cars",
+        "label": "Cars",
+        "catalog": "cars",
+        "idLabel": "ID"
+      }
+    ],
+    "guides": "guides",
+    "wiki": {
+      "label": "Forza Wiki",
+      "base": "https://forza.fandom.com"
+    },
+    "links": [
+      {
+        "label": "Forza Wiki",
+        "url": "https://forza.fandom.com/wiki/Forza_Horizon_5"
+      },
+      {
+        "label": "All cars (Forza Wiki)",
+        "url": "https://forza.fandom.com/wiki/Forza_Horizon_5/Cars"
+      }
+    ],
+    "images": {
+      "api": "https://forza.fandom.com/api.php",
+      "credit": "Pictures from the Forza Wiki on Fandom",
+      "creditUrl": "https://forza.fandom.com/",
+      "catalogs": {
+        "cars": {
+          "thumb": [
+            "File:FH5 {page}.png",
+            "{page}"
+          ],
+          "hero": [
+            "File:FH5 {page}.png",
+            "{page}"
+          ]
+        }
+      }
+    }
+  },
+  "checklists": [
+    {
+      "name": "Barn Finds",
+      "items": [
+        "1973 BMW 2002 Turbo",
+        "1953 Chevrolet Corvette",
+        "1968 Dodge Dart HEMI Super Stock",
+        "1999 Dodge Viper GTS ACR",
+        "1962 Ferrari 250 GTO",
+        "1989 Ferrari F40 Competizione",
+        "1965 Ford F-100",
+        "1967 Ford Racing Escort Mk1",
+        "1968 Ford Mustang GT 2+2 Fastback",
+        "1970 GMC Jimmy",
+        "1991 Jaguar Sport XJR-15",
+        "1973 Porsche 911 Carrera RS",
+        "1968 Renault 4L Export",
+        "1993 Toyota #1 T100 Baja Truck"
+      ]
+    }
+  ]
+}

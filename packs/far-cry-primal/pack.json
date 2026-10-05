@@ -1,0 +1,77 @@
+{
+  "name": "Far Cry Primal",
+  "exe": [
+    "FCPrimal.exe"
+  ],
+  "art": {
+    "steamAppId": 371660
+  },
+  "info": [
+    {
+      "title": "Library",
+      "body": "Weapons and wildlife in Far Cry Primal, with pictures and links to the Far Cry Wiki."
+    },
+    {
+      "title": "Overlay",
+      "body": "Set the game to borderless or windowed (Display options) for the overlay and Keystone's browser to show on top."
+    }
+  ],
+  "library": {
+    "catalogs": {
+      "weapons": "weapons.json",
+      "animals": "animals.json"
+    },
+    "sections": [
+      {
+        "id": "weapons",
+        "label": "Weapons",
+        "catalog": "weapons",
+        "idLabel": "ID"
+      },
+      {
+        "id": "animals",
+        "label": "Animals",
+        "catalog": "animals",
+        "idLabel": "ID"
+      }
+    ],
+    "guides": "guides",
+    "wiki": {
+      "label": "Far Cry Wiki",
+      "base": "https://farcry.fandom.com"
+    },
+    "links": [
+      {
+        "label": "Far Cry Wiki",
+        "url": "https://farcry.fandom.com/wiki/Far_Cry_Primal"
+      }
+    ],
+    "images": {
+      "api": "https://farcry.fandom.com/api.php",
+      "credit": "Pictures from the Far Cry Wiki on Fandom",
+      "creditUrl": "https://farcry.fandom.com/",
+      "catalogs": {
+        "weapons": {
+          "thumb": [
+            "{page}",
+            "{name}"
+          ],
+          "hero": [
+            "{page}",
+            "{name}"
+          ]
+        },
+        "animals": {
+          "thumb": [
+            "{page}",
+            "{name}"
+          ],
+          "hero": [
+            "{page}",
+            "{name}"
+          ]
+        }
+      }
+    }
+  }
+}

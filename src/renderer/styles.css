@@ -666,3 +666,68 @@ kbd {
 .xh-num { width: 70px; height: 32px; font-family: var(--font-mono); }
 .pc-picks { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 4px 0 12px; }
 .pc-picks .block-note { margin: 0; }
+
+/* ---- Library pictures ---- */
+.cat-card.has-thumb { flex-direction: row; align-items: center; gap: 10px; padding: 8px 12px 8px 8px; }
+.cat-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cat-thumb { flex: none; width: 40px; height: 40px; padding: 3px; object-fit: contain; border-radius: 8px; background: #e7e4dc; }
+/* The wiki's pictures are drawn for its light pages (creature icons are
+   black ink on transparent), so they sit on a light paper tile here. */
+/* No picture on the wiki: keep the space so the names stay lined up. */
+.cat-thumb.none { visibility: hidden; }
+/* The Library's reading column is narrow, so the picture sits under the
+   title as a banner rather than beside the details. */
+.entry-hero { margin: 14px 0 4px; max-width: 560px; padding: 10px; border-radius: var(--r-lg); background: #e7e4dc; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 160px; }
+.entry-hero img { display: block; max-width: 100%; max-height: 320px; object-fit: contain; }
+.entry-hero.loading { animation: pic-wait 1.2s ease-in-out infinite alternate; }
+@keyframes pic-wait { from { opacity: 0.35; } to { opacity: 0.6; } }
+.spawn-tabs { margin: 4px 0 12px; }
+.spawn-tabs button { text-transform: none; letter-spacing: 0; font-size: 13px; height: 32px; padding: 0 14px; }
+.spawn-stage { position: relative; width: min(100%, 440px); aspect-ratio: 1; border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--line); background: var(--ink); }
+.spawn-stage img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.spawn-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.spawn-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.spawn-legend .sw { width: 10px; height: 10px; border-radius: 2px; }
+.pic-credit { color: var(--faint); font-size: 12px; margin-top: 18px; }
+.pic-credit a { color: var(--muted); }
+
+/* ---- identifier (Library tool) ---- */
+.ident-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 4px 0 16px; }
+.ident-bar .inline-field { display: inline-flex; gap: 10px; align-items: center; color: var(--muted); font-size: 13px; }
+.ev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.ev-btn { display: grid; grid-template-columns: 22px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+.ev-btn:hover { background: var(--raised); }
+.ev-mark { grid-row: span 2; width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid var(--line-strong); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+.ev-name { font-weight: 500; font-size: 13px; }
+.ev-state { font-size: 11px; color: var(--faint); min-height: 1em; }
+.ev-btn.found { border-color: var(--accent-line); background: var(--accent-wash); }
+.ev-btn.found .ev-mark { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.ev-btn.out .ev-mark { background: rgba(255, 107, 107, 0.18); border-color: var(--danger); color: var(--danger); }
+.ev-btn.out .ev-name { color: var(--muted); text-decoration: line-through; }
+.ev-btn.useful .ev-state { color: var(--warn); }
+.ident-verdict { margin: 18px 0 10px; font-weight: 600; color: var(--text); }
+.ident-verdict.solved { color: var(--accent); font-size: 18px; }
+.gh-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+.gh-card { display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 4px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--card); }
+.gh-card.out { opacity: 0.55; }
+.gh-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; text-align: left; padding: 6px 8px; border: 0; background: none; color: inherit; cursor: pointer; border-radius: var(--r-sm); }
+.gh-main:hover .gh-name { color: var(--accent); }
+.gh-name { font-weight: 600; color: var(--text); }
+.gh-ev { display: flex; flex-wrap: wrap; gap: 4px; }
+.gh-ev .chip { font-size: 11px; padding: 2px 7px; border-radius: var(--r-pill); background: rgba(255, 255, 255, 0.07); color: var(--muted); }
+.gh-ev .chip.found { background: var(--accent-wash); color: var(--accent); }
+.gh-ev .chip.out { color: var(--danger); text-decoration: line-through; }
+.gh-ev .chip.forced { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.gh-why { font-size: 11px; color: var(--faint); }
+.gh-out { margin-top: 16px; }
+.gh-out summary { cursor: pointer; color: var(--muted); margin-bottom: 10px; }
+.entry-list ul { margin: 0; padding-left: 20px; }
+.entry-list li { margin: 4px 0; color: var(--body); }
+.timer-presets { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0 4px; }
+.timer-presets .block-note { margin: 0; }
+
+/* The identifier's evidence chips aren't status chips: no dot. */
+.gh-ev .chip::before { display: none; }
+.gh-ev .chip { display: inline-block; height: auto; line-height: 1.5; border: 0; }
+
+.cat-code { font: 600 12px var(--font-mono); color: var(--accent); letter-spacing: 0.06em; }

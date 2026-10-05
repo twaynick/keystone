@@ -1,0 +1,66 @@
+{
+  "name": "Forza Motorsport",
+  "exe": [
+    "forza_steamworks_release_final.exe",
+    "forza_gaming.desktop.x64_release_final.exe"
+  ],
+  "art": {
+    "steamAppId": 2440510
+  },
+  "memory": false,
+  "info": [
+    {
+      "title": "Library",
+      "body": "Every car in Forza Motorsport (680) by make, with its class, value, how to get it and stats, pictures, and links to the Forza Wiki."
+    },
+    {
+      "title": "No mods",
+      "body": "Forza Motorsport needs a connection for any progression (career, cars, credits), so Keystone keeps out of its memory. The overlay, timers, checklists and Library all work."
+    }
+  ],
+  "library": {
+    "catalogs": {
+      "cars": "cars.json"
+    },
+    "sections": [
+      {
+        "id": "cars",
+        "label": "Cars",
+        "catalog": "cars",
+        "idLabel": "ID"
+      }
+    ],
+    "guides": "guides",
+    "wiki": {
+      "label": "Forza Wiki",
+      "base": "https://forza.fandom.com"
+    },
+    "links": [
+      {
+        "label": "Forza Wiki",
+        "url": "https://forza.fandom.com/wiki/Forza_Motorsport_(2023)"
+      },
+      {
+        "label": "All cars (Forza Wiki)",
+        "url": "https://forza.fandom.com/wiki/Forza_Motorsport_(2023)/Cars"
+      }
+    ],
+    "images": {
+      "api": "https://forza.fandom.com/api.php",
+      "credit": "Pictures from the Forza Wiki on Fandom",
+      "creditUrl": "https://forza.fandom.com/",
+      "catalogs": {
+        "cars": {
+          "thumb": [
+            "File:FM23 {page}.png",
+            "{page}"
+          ],
+          "hero": [
+            "File:FM23 {page}.png",
+            "{page}"
+          ]
+        }
+      }
+    }
+  }
+}

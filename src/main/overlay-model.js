@@ -638,6 +638,55 @@ class OverlayModel {
     return n;
   }
 
+  // ---------- the phone's map ----------
+  // Everything the phone's Map tab draws except the marker points, which are
+  // pack data that only change with the map (see phoneMapPoints). Rides on
+  // every snapshot, so it stays small.
+  phoneMap() {
+    if (!this.game) return null;
+    const map = this.map();
+    const v = this.variant();
+    const waypoints = this.waypoints().map((w) => ({ id: w.id, name: w.name, x: w.x, y: w.y }));
+    if (!map && !waypoints.length && this.variants().length < 2) return null;
+    let image = null;
+    if (map?.image) {
+      try {
+        // Changes when the picture does, so the phone knows to fetch it again.
+        image = { key: `${Math.round(fs.statSync(map.image).mtimeMs)}-${v.id}`, custom: map.custom };
+      } catch { /* deleted under us: no picture */ }
+    }
+    const layers = this.layers();
+    return {
+      variants: this.variants().map((x) => ({ id: x.id, name: x.name })),
+      variant: { id: v.id, name: v.name, units: v.units },
+      bounds: map?.bounds || null,
+      image,
+      layers: layers.map((l) => ({ id: l.id, name: l.name, color: l.color, shape: l.shape, on: l.on, count: l.points.length })),
+      // Changes when the points do: a different map, or a pack update.
+      pointsKey: `${v.id}:${layers.map((l) => `${l.id}.${l.points.length}`).join(',')}`,
+      credits: v.markers.credits,
+      waypoints,
+      tracked: this._data().tracked || null,
+      here: this.here(),
+      teleport: this.teleportMethod(),
+      findMe: Boolean(this.pack?.findMe && this.coords()),
+    };
+  }
+
+  phoneMapPoints() {
+    this._require();
+    const v = this.variant();
+    return { variant: v.id, layers: this.layers().map((l) => ({ id: l.id, points: l.points.map((p) => ({ name: p.name, x: p.x, y: p.y, note: p.note || null })) })) };
+  }
+
+  // The current map picture for the phone: { file, type } or null.
+  phoneMapImage() {
+    const image = this.game ? this.map()?.image : null;
+    if (!image) return null;
+    const type = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[path.extname(image).toLowerCase()];
+    return type ? { file: image, type } : null;
+  }
+
   // ---------- what the overlay renders ----------
   state() {
     if (!this.game) return { attached: false };
@@ -675,6 +724,8 @@ class OverlayModel {
       checklists: this.checklists().map((l) => ({ id: l.id, name: l.name, total: l.items.length, done: l.items.filter((i) => i.done).length })),
       checklist: this.activeList(),
       timers: this.c.timers ? this.c.timers.list() : [],
+      identify: this.c._identifyBrief(),
+      timerPresets: (this.pack?.timerPresets || []).map((t) => t.name),
       crosshair: this.crosshair(),
       pcstats: ov.pcstats,
       // When the game started running (for "playing for"), or null.

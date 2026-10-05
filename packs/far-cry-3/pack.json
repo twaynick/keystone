@@ -1,0 +1,97 @@
+{
+  "name": "Far Cry 3",
+  "exe": [
+    "farcry3.exe",
+    "farcry3_d3d11.exe"
+  ],
+  "art": {
+    "steamAppId": 220240
+  },
+  "offlineOnly": true,
+  "offlineNote": "Far Cry 3 has a separate multiplayer mode. Use mods only in the single-player campaign, offline. Ubisoft can ban accounts for cheating in online play.",
+  "info": [
+    {
+      "title": "Library",
+      "body": "Weapons, vehicles and wildlife in Far Cry 3, with pictures and links to the Far Cry Wiki."
+    },
+    {
+      "title": "Overlay",
+      "body": "Set the game to borderless or windowed (Display options) for the overlay and Keystone's browser to show on top."
+    }
+  ],
+  "library": {
+    "catalogs": {
+      "weapons": "weapons.json",
+      "vehicles": "vehicles.json",
+      "animals": "animals.json"
+    },
+    "sections": [
+      {
+        "id": "weapons",
+        "label": "Weapons",
+        "catalog": "weapons",
+        "idLabel": "ID"
+      },
+      {
+        "id": "vehicles",
+        "label": "Vehicles",
+        "catalog": "vehicles",
+        "idLabel": "ID"
+      },
+      {
+        "id": "animals",
+        "label": "Animals",
+        "catalog": "animals",
+        "idLabel": "ID"
+      }
+    ],
+    "guides": "guides",
+    "wiki": {
+      "label": "Far Cry Wiki",
+      "base": "https://farcry.fandom.com"
+    },
+    "links": [
+      {
+        "label": "Far Cry Wiki",
+        "url": "https://farcry.fandom.com/wiki/Far_Cry_3"
+      }
+    ],
+    "images": {
+      "api": "https://farcry.fandom.com/api.php",
+      "credit": "Pictures from the Far Cry Wiki on Fandom",
+      "creditUrl": "https://farcry.fandom.com/",
+      "catalogs": {
+        "weapons": {
+          "thumb": [
+            "{page}",
+            "{name}"
+          ],
+          "hero": [
+            "{page}",
+            "{name}"
+          ]
+        },
+        "vehicles": {
+          "thumb": [
+            "{page}",
+            "{name}"
+          ],
+          "hero": [
+            "{page}",
+            "{name}"
+          ]
+        },
+        "animals": {
+          "thumb": [
+            "{page}",
+            "{name}"
+          ],
+          "hero": [
+            "{page}",
+            "{name}"
+          ]
+        }
+      }
+    }
+  }
+}

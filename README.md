@@ -11,7 +11,7 @@ A mod control panel for single-player PC games. Load a Cheat Engine table for a 
 
 **The easy way: the installer.** Run `Keystone Setup <version>.exe`. It installs for your Windows account only (no administrator needed) and adds Keystone to the Start menu and desktop.
 
-The installer isn't code-signed, so the first time Windows shows *"Windows protected your PC"*. Click **More info**, then **Run anyway**. Signing needs a paid certificate; this is the same prompt every unsigned app gets.
+Unless the release was built with code signing set up, Windows shows *"Windows protected your PC"* the first time. Click **More info**, then **Run anyway**. That's the prompt every unsigned app gets. The release workflow signs installers automatically once Azure Artifact Signing is set up; [docs/SIGNING.md](docs/SIGNING.md) walks through it (about $10 a month).
 
 **Updating:** run the newer installer. It replaces the old version and keeps all your settings, profiles, waypoints and command setup (they live in `%APPDATA%\Keystone`).
 
@@ -82,6 +82,8 @@ Each game's knowledge in one place. Open **Library** in the sidebar.
 - **Guides** written for the game, plus your own: drop Markdown (`.md`) files in your guides folder (**Library → All guides → Open my guides folder**) and they show up next to the pack's guides.
 - **My notes** on any creature or item, saved per game.
 - **Search** covers everything at once.
+- **Tools**: Phasmophobia has a **Ghost identifier**: tick the evidence you find or rule out, set how much evidence the difficulty gives, and it narrows the 30 ghosts down, allowing for hidden and guaranteed evidence and the Mimic's fake orbs. It's on your phone and in the overlay too.
+- **Pictures** (ARK, Fallout 3, New Vegas, Fallout 4): every creature and item has its picture in the lists and on its page (creature pages show the dossier), and creature pages show **Where it spawns** on each map. The pickers in Commands show them too. They come from the ARK Wiki: your PC downloads each one the first time you look at it and keeps a copy, so they load instantly after that and work offline. Variants without their own picture (Abyssal, Alpha, X- creatures) use the base creature's. Fallout's come from the Fallout Wiki on Fandom: most Fallout 3 and New Vegas items, and about 70% of Fallout 4's (the wiki has no picture for the rest).
 
 ### Browser
 
@@ -138,7 +140,14 @@ Toggle mods from your phone while you play.
 2. Connect your phone to the same Wi-Fi as the PC and scan the QR code with its camera.
 3. Add the page to your home screen so it opens like an app (iPhone: Share, then Add to Home Screen; Android: the ⋮ menu, then Add to Home screen).
 
-On the phone, flip a switch to lock a mod, tap a mod's name to set or lock a specific value, and pick a profile at the top to apply it. Everything stays in sync with the desktop window.
+The phone has up to four tabs, depending on the game:
+
+- **Mods:** flip a switch to lock a mod, tap a mod's name to set or lock a specific value, and pick a profile at the top to apply it.
+- **Map:** the game's map with its marker layers (tap the chips to show or hide them), your waypoints and where you are: a live arrow when Keystone reads your position, or your "I'm here" ring. Drag to move, pinch or use + and − to zoom, ⛶ for full screen (good in landscape). Tap a spot, marker or waypoint to teleport there (games with teleport), add a waypoint, track it, delete it, or mark "I'm here". ARK has **Find me**. The waypoint list under the map shows how far each one is, with Track and Go buttons.
+- **Library:** the same Library as the desktop: search, every section with pictures and a filter, entry pages with their facts, codes (with Copy), ARK spawn maps, a link to the wiki page, and your notes (they save to the PC). Guides read on the phone too. The phone's back gesture steps back through the pages.
+- **Tools:** commands (games with a console or RCON: the pack's quick commands, admin login and a box to type any command), timers, your checklists (pick which one; the overlay shows the same one) and the ghost identifier. In the Library, creatures and items have their commands right on the page: **Spawn tamed**, **Spawn wild**, **Give to me**, with the same form as on the PC.
+
+Everything stays in sync with the desktop window: a waypoint added on the phone is on the overlay too, and the marker filter is the same one.
 
 Things to know:
 
@@ -232,6 +241,7 @@ src/main/            Electron main process
   hotkeys.js         per-mod hotkey rules and registration
   tray.js            system tray icon and menu
   library.js         Library: catalog pages, Markdown guides, notes, search
+  library-images.js  Library pictures and spawn maps from the game's wiki (cached)
   browser-window.js  Keystone's browser window (Ctrl+Shift+B)
   controller.js      app actions, shared by every UI
   store.js           per-game settings and profiles on disk
@@ -239,6 +249,7 @@ src/main/            Electron main process
   packs.js           game packs
   overlay-model.js   overlay data: position, map, waypoints, checklists, stats
   timers.js          countdown timers and their alerts
+  identify.js        "what is it?" tools, like the Phasmophobia ghost identifier
   pcstats.js         CPU and RAM for the overlay's PC panel
   overlay-window.js  the see-through overlay window and its hotkeys
   commands/
@@ -266,13 +277,92 @@ assets/              app icons
 src/shared/          shared styles, accent themes, Geist fonts (OFL), map math, crosshair drawing
 packs/demo/          the demo game's pack: table, map, waypoints, info
 packs/ark-survival-ascended/  ASA pack: commands, creature and item IDs, guides
+packs/fallout-3/     Fallout 3 pack: console commands, 714 base-game items, bobblehead checklist, guides
+packs/far-cry-*/    Far Cry 3, 4, 5, 6, New Dawn, Primal: weapons, vehicles and animals with pictures; mods flagged offline-only
+packs/forza-*/      Forza Horizon 4, 5, 6 (mods offline-only) and Forza Motorsport (online-only, no mods): every car with pictures
+packs/lego-*/       LEGO packs (Star Wars: The Skywalker Saga, Star Wars: The Complete Saga, Batman 2): cross-checked codes
+packs/phasmophobia/  Phasmophobia pack: ghost identifier data, ghosts, equipment, cursed possessions, maps, incense timers, guides
+packs/fallout-new-vegas/  New Vegas pack: console commands, 1,100+ base-game items, snow globe checklist, guides
 packs/fallout-4/     Fallout 4 pack: console commands, 648 base-game items, guides
+scripts/build-gamebryo-catalog.js  rebuilds the Fallout 3 / New Vegas item lists from the wiki
+scripts/add-wiki-pictures.js       fills in each catalog entry's picture file from its wiki infobox
+scripts/build-category-catalog.js  builds a Library list from wiki categories (used for Far Cry)
+scripts/build-forza-cars.js  builds a Forza car list from the Forza Wiki's car tables
+scripts/build-phasmophobia.js      rebuilds the Phasmophobia ghost, equipment and map lists from the wiki
 test/                node:test suite
 scripts/capture.js   dev helper: launch, run a snippet, save a screenshot
 .github/workflows/   builds the Windows installer when a version tag is pushed
 ```
 
 ## Changelog
+
+### 0.24.1
+- Code signing, ready to switch on: the release workflow signs the installer with Azure Artifact Signing when the repo has the signing secrets and variables, checks the signature before publishing, and builds unsigned (as before) when it doesn't. A half-finished setup stops the build with a message saying what's missing, rather than quietly shipping unsigned. Setup steps are in `docs/SIGNING.md`.
+
+### 0.24.0
+- Phone commands: games with commands (ARK, Fallout) get a **Commands** section in the phone's Tools tab with the pack's quick commands, admin login and a box for typing any command, over the console or RCON. Library pages for creatures and items have **Spawn tamed**, **Spawn wild** and **Give to me** buttons that open the same form as on the PC (level, how many, quality...).
+- The PC still builds and checks every command; the phone only picks one and fills in the form. Your admin password never goes to the phone.
+
+### 0.23.1
+- Phone checklists: when a game has more than one checklist, the phone's Tools tab has a picker. Picking a list there also changes the one the overlay shows, the same as picking it on the PC.
+
+### 0.23.0
+- Phone Library: a **Library** tab on the phone with search, every section (with pictures and filters), entry pages, codes with a Copy button, ARK spawn maps, wiki links, guides and your notes. Notes typed on the phone save to the PC.
+- Pictures come from the PC's own cache over your home network, never from the wiki directly, with the pairing code in a header as for the map.
+
+### 0.22.0
+- Phone map: a **Map** tab on the phone with the game's map, marker layers you can filter, waypoints, and your live position or "I'm here". Drag, pinch, zoom buttons and full screen. Tap anything on the map to teleport there, add or track a waypoint, or set "I'm here"; ARK's Find me works from the phone too. It works for online games as well (map, markers and "I'm here"; teleport still needs mods).
+- The phone is now split into **Mods**, **Map** and **Tools** tabs instead of one long page. The Teleport list moved into the Map tab.
+- The map picture comes over your home network once per picture, using the pairing code in a header (never in the address), with the same lockout for wrong codes as the rest of the phone link.
+
+### 0.21.0
+- Forza packs: **Forza Horizon 6, 5 and 4** and **Forza Motorsport**. Every car in each game is in the Library (651, 903, 751 and 680) by make, with its picture, class and PI, value, how to get it, rarity, country and stats. Horizon 6, 5 and 4 have Barn Find checklists, and Horizon 6 a Treasure Car list, each with where the wiki places the car.
+- Horizon mods are flagged offline-only, with a warning that your progress syncs to your Xbox profile, so modded credits or cars follow you online.
+- Forza Motorsport is online-only (any progression needs a connection), so it gets the Library and overlay but no mods.
+- Steam art for newer games: games released since about 2024 keep their Steam art under hashed file names, so covers and banners came up blank. Keystone now asks Steam's store API for the current file when the usual address has nothing. Art Steam really doesn't have is retried after two weeks instead of never.
+
+Car data and pictures come from the [Forza Wiki](https://forza.fandom.com) on Fandom ("how to get it" is the wiki's own wording); executable names from Steam's launch configuration.
+
+### 0.20.0
+- Far Cry packs: **Far Cry 3, 4, 5, 6, New Dawn and Primal**. Each has its weapons, vehicles and animals in the Library with pictures (about 860 pages in all), a guide, and Steam art. Mods are flagged single-player/offline only for the games with co-op or multiplayer. Far Cry 5 adds a Prepper Stash checklist.
+
+Far Cry data and pictures come from the [Far Cry Wiki](https://farcry.fandom.com) on Fandom; executable names from Steam's launch configuration.
+
+### 0.19.0
+- LEGO packs: **LEGO Star Wars: The Skywalker Saga** (20 codes), **LEGO Star Wars: The Complete Saga** (61) and **LEGO Batman 2: DC Super Heroes** (22). Only codes that two separate guides agree on are included. Codes show on their cards with a Copy button, characters and vehicles have pictures, each game has a guide to entering codes and a "Codes entered" checklist.
+
+LEGO codes were cross-checked between GGRecon, Samurai Gamers and TechRadar (Skywalker Saga), gameplay.tips and GameRevolution (Complete Saga), and GameRevolution and GameFAQs (Batman 2). Executable names come from Steam's launch configuration. Pictures come from Brickipedia and the LEGO Star Wars Wiki on Fandom.
+
+### 0.18.0
+- Phasmophobia pack: a **Ghost identifier** (Library, phone and overlay) covering all 30 ghosts, with difficulty-aware evidence, guaranteed evidence, the Mimic's orbs, "worth checking" hints and ruling ghosts out by behaviour; Library pages for every ghost (evidence, strengths, weaknesses), equipment, cursed possessions and maps, with pictures; one-tap incense and hunt-cooldown timers; two guides. Mods are flagged single-player only.
+- Packs can add one-tap timers (Overlay tab and phone), entry details and bullet lists to Library pages, and "what is it?" tools.
+- Games without commands don't show an empty Commands tab.
+
+Phasmophobia data and pictures come from the [Phasmophobia Wiki](https://phasmophobia.fandom.com) on Fandom. Ghost evidence changes with game updates; `scripts/build-phasmophobia.js` refreshes it.
+
+### 0.17.1
+- More Fallout 4 pictures: each item's picture file is read from its wiki infobox, which finds pictures the page-picture lookup missed (450 of 648 items).
+
+### 0.17.0
+- Fallout: New Vegas pack: over 1,100 base-game items with Form IDs and pictures, give or drop any of them, and 18 quick commands (god mode, no clip, undetectable, caps, levels, S.P.E.C.I.A.L., skills, Karma, XP, carry weight, Hardcore mode, time and more). A snow globe checklist with locations, three guides, and item pages link to the Fallout Wiki.
+- Fixed the word "null" showing on Library pages without a spawn map or credit line.
+- Debug and test items are left out of the Fallout 3 list.
+
+### 0.16.0
+- Fallout 3 pack: 714 base-game items with Form IDs and pictures (weapons by skill, apparel, aid, ammo, bobbleheads, books, notes and holotapes, misc), give or drop any of them, and 16 quick commands (god mode, no clip, caps, levels, S.P.E.C.I.A.L., skills, Karma, XP, carry weight, time and more). A bobblehead checklist with locations, three guides, and item pages link to the Fallout Wiki.
+- Play starts the copy you have installed (another edition, GOG, Epic) before the pack's default Steam app.
+- Every bundled pack is now checked by the tests: catalogs, every command, pictures, checklists and guides.
+
+Fallout 3 item data and pictures come from [Nukapedia](https://fallout.fandom.com), the Fallout Wiki on Fandom.
+
+### 0.15.1
+- Fallout 4 Library pictures (about two thirds of the 648 items) from Nukapedia on Fandom, using each page's main picture.
+- Packs can now take pictures from a wiki page's main image through the wiki's API, for wikis whose file names don't follow the item names.
+
+### 0.15.0
+- Library pictures for ARK: creature dossiers and icons, item icons, in the Library and in the Commands pickers (over 99% of entries), downloaded from the ARK Wiki on first view and cached.
+- Creature pages show **Where it spawns**, with a tab for each map the creature appears on and a rarity legend.
+- Fixed a creature listed as "File:Tidepup (Large).png Tidepup (Large)".
 
 ### 0.14.2
 - Crosshair overlay with five styles, size, thickness, gap, opacity, colour, outline and nudge, with a live preview; saved per game.
