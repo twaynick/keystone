@@ -70,7 +70,7 @@ class LibraryModel {
     return {
       available: true,
       game: this.c.snapshot().displayName,
-      sections: sections.map((s) => ({ id: s.id, label: s.label, catalog: s.catalog })),
+      sections: sections.map((s) => ({ id: s.id, label: s.label, catalog: s.catalog, idLabel: s.idLabel || 'ID' })),
       guides: this.guideList(),
       wiki: spec.wiki ? { label: spec.wiki.label } : null,
       links: (spec.links || []).filter((l) => /^https:\/\//.test(l.url)),
@@ -111,6 +111,10 @@ class LibraryModel {
   }
 
   _wikiUrl(e) {
+    // Entries that know their exact wiki page (games whose wiki titles carry
+    // suffixes like "(Fallout 4)") link straight to it.
+    const base = this.spec?.wiki?.base;
+    if (base && typeof e.page === 'string' && /^\/wiki\/[^\s]+$/.test(e.page)) return base + e.page;
     const tpl = this.spec?.wiki?.page;
     if (!tpl) return null;
     // Wiki page titles use underscores; variants like "(Alpha)" stay as-is.

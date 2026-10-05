@@ -1,6 +1,6 @@
 'use strict';
 
-/* global browserApi */
+/* global browserApi, KeystoneTheme */
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -88,6 +88,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 browserApi.onNavigate(go);
+browserApi.appearance().then((r) => { if (r.ok) KeystoneTheme.applyAccent(r.data.accent); });
+browserApi.onAppearance((a) => KeystoneTheme.applyAccent(a.accent));
 
 (async () => {
   const res = await browserApi.state();

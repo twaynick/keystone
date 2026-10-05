@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: ksmap:; style-src 'self'; font-src 'self'; script-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: ksmap: ksart:; style-src 'self'; font-src 'self'; script-src 'self'">
   <title>Keystone</title>
   <link rel="stylesheet" href="../shared/base.css">
   <link rel="stylesheet" href="styles.css">
@@ -11,25 +11,18 @@
   <div class="app" id="app">
     <aside class="nav" aria-label="Sections">
       <div class="nav-brand">
-        <img src="../../assets/icon-256.png" alt="" width="30" height="30">
+        <img src="../../assets/icon-256.png" alt="" width="32" height="32">
         <span class="nav-label brand-word">Keystone</span>
       </div>
       <nav class="nav-items">
-        <button class="tab" data-view="library" title="Library">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>
-          <span class="nav-label">Library</span>
+        <button class="tab" data-view="home" aria-current="page" title="Games">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>
+          <span class="nav-label">Games</span>
         </button>
-        <button class="tab" data-view="mods" aria-current="page" title="Mods">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
-          <span class="nav-label">Mods</span>
-        </button>
-        <button class="tab" data-view="commands" title="Commands">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12.5 15H17"/></svg>
-          <span class="nav-label">Commands</span>
-        </button>
-        <button class="tab" data-view="overlay" title="Overlay">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20z"/><path d="M9 4v13.5M15 6.5V20"/></svg>
-          <span class="nav-label">Overlay</span>
+        <button class="tab nav-game" id="navGame" data-view="game" title="Current game" hidden>
+          <img class="nav-thumb" id="navThumb" alt="">
+          <span class="nav-label" id="navGameName"></span>
+          <span class="nav-dot" id="navDot" aria-hidden="true"></span>
         </button>
         <button class="tab" data-view="phone" title="Phone">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 17.5h2"/></svg>
@@ -46,81 +39,113 @@
       </button>
     </aside>
 
-    <header class="topbar">
-      <div class="switcher">
-        <button class="switcher-btn" id="switcherBtn" aria-haspopup="listbox" aria-expanded="false">
-          <span class="live-dot" id="liveDot" aria-hidden="true"></span>
-          <span class="switcher-text">
-            <span class="attached-name" id="attachedName">Choose a game</span>
-            <span class="attached-meta" id="attachedMeta">Nothing attached</span>
-          </span>
-          <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
-        </button>
-        <div class="switcher-pop" id="switcherPop" hidden>
-          <div class="pop-head">
-            <input class="field" id="procSearch" type="search" placeholder="Find a game" autocomplete="off">
-            <button class="btn small ghost" id="refreshBtn" title="Refresh the list of running programs">Refresh</button>
-          </div>
-          <ul class="proc-list" id="procList" role="listbox" aria-label="Running programs"></ul>
-          <p class="pop-note" id="procNote"></p>
-        </div>
-      </div>
-      <span id="attached" hidden></span>
-      <div class="topbar-actions">
-        <button class="btn" id="loadTableBtn" hidden>Load cheat table</button>
-        <button class="btn ghost" id="detachBtn" hidden>Detach</button>
-      </div>
-    </header>
-
     <main class="main" id="main">
-      <section class="empty" id="emptyDetached">
-        <h1>Pick a game to attach</h1>
-        <p>Start your game, then choose it from the game switcher at the top. Mods work with single-player and offline games.</p>
-        <div class="empty-actions">
-          <button class="btn primary" id="pickGameBtn">Choose a game</button>
-          <button class="btn" id="demoBtn">Try the demo game</button>
+      <section class="home" id="homeView">
+        <header class="home-head">
+          <h1>Your games</h1>
+          <input class="field search" id="gameSearch" type="search" placeholder="Search games" autocomplete="off">
+        </header>
+        <div class="cat-tabs home-filter" id="homeFilter" role="group" aria-label="Show">
+          <button data-filter="all" aria-pressed="true">All</button>
+          <button data-filter="installed" aria-pressed="false">Installed</button>
+          <button data-filter="running" aria-pressed="false">Running</button>
         </div>
+        <div class="game-grid" id="gameGrid"></div>
+
+        <section class="others">
+          <div class="others-head">
+            <h2>Other running programs</h2>
+            <button class="btn small ghost" id="refreshBtn">Refresh</button>
+          </div>
+          <p class="others-note">For games without a Keystone pack. Pick one to load your own Cheat Engine table.</p>
+          <input class="field search" id="procSearch" type="search" placeholder="Find a program" autocomplete="off">
+          <ul class="proc-list" id="procList" aria-label="Running programs"></ul>
+          <p class="pop-note" id="procNote"></p>
+        </section>
       </section>
 
-      <section class="empty" id="emptyNoTable" hidden>
-        <h1>No mods loaded for this game yet</h1>
-        <p>Load a Cheat Engine table (.CT) made for this game and its values show up here as mods you can lock or set.</p>
-        <button class="btn primary" id="emptyLoadBtn">Load cheat table</button>
-      </section>
-
-      <section class="empty" id="emptyNoMods" hidden>
-        <h1>Mods aren't available for this game</h1>
-        <p id="noModsText"></p>
-        <div class="empty-actions">
-          <button class="btn primary" id="noModsCommands" hidden>Open commands</button>
-        </div>
-      </section>
-
-      <section class="mods" id="modsView" hidden>
-        <div class="mods-toolbar">
-          <input class="field mods-search" id="modSearch" type="search" placeholder="Filter mods" autocomplete="off">
-          <span class="mods-count" id="modsCount"></span>
-          <div class="profiles" id="profiles">
-            <span class="dirty" id="profileDirty" hidden>Unsaved changes</span>
-            <select class="field profile-select" id="profileSelect" aria-label="Profile"></select>
-            <button class="btn small" id="profileSave" title="Save the current locks and values to this profile">Save</button>
-            <button class="btn small ghost" id="profileSaveAs">Save as new</button>
-            <div class="menu-wrap">
-              <button class="btn small ghost" id="profileMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-label="More profile options">⋯</button>
-              <div class="menu" id="profileMenu" role="menu" hidden>
-                <button role="menuitem" id="profileRename">Rename profile</button>
-                <button role="menuitem" id="profileDelete" class="danger">Delete profile</button>
-                <label class="menu-check"><input type="checkbox" id="autoApply"> Apply this profile when the game starts</label>
-              </div>
+      <section class="game" id="gameView" hidden>
+        <header class="hero" id="hero">
+          <div class="hero-bg"><img id="heroImg" alt=""></div>
+          <div class="hero-inner">
+            <img class="hero-cover" id="heroCover" alt="">
+            <div class="hero-text">
+              <h1 id="gameTitle"></h1>
+              <div class="hero-status" id="gameStatus"></div>
+            </div>
+            <div class="hero-actions">
+              <button class="btn play" id="playBtn">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.9l10.4-6.5a1 1 0 0 0 0-1.8L9.5 4.6A1 1 0 0 0 8 5.5z"/></svg>
+                <span id="playLabel">Play</span>
+              </button>
+              <button class="icon-btn" id="detachBtn" title="Close this game" aria-label="Close this game">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+              </button>
             </div>
           </div>
-        </div>
-        <div class="mods-head" aria-hidden="true">
-          <span>Mod</span><span class="num">In game</span><span>Value</span><span></span><span>Lock</span>
-        </div>
-        <div class="mods-list" id="modsList"></div>
-      </section>
-      <section class="lib" id="libraryView" hidden>
+          <nav class="game-tabs" id="gameTabs" aria-label="Game sections">
+            <button data-tab="mods" aria-pressed="true">Mods</button>
+            <button data-tab="commands">Commands</button>
+            <button data-tab="library">Library</button>
+            <button data-tab="overlay">Map &amp; overlay</button>
+          </nav>
+        </header>
+
+        <div class="game-body">
+          <section class="pane mods-pane" id="modsPane">
+            <div class="offline-banner" id="offlineBanner" hidden>
+              <span class="badge warn">Offline only</span>
+              <p id="offlineText"></p>
+              <label class="seg-label">Use mods in this game
+                <span class="seg" id="modsSwitch" role="group" aria-label="Use mods in this game">
+                  <button data-v="off">Off</button><button data-v="on">On</button>
+                </span>
+              </label>
+            </div>
+
+            <section class="empty" id="emptyNoTable" hidden>
+              <h2>No mods loaded for this game yet</h2>
+              <p>Load a Cheat Engine table (.CT) made for this game and its values show up here as mods.</p>
+              <button class="btn primary" id="emptyLoadBtn">Load cheat table</button>
+            </section>
+
+            <section class="empty" id="emptyNoMods" hidden>
+              <h2 id="noModsTitle">Mods aren't available right now</h2>
+              <p id="noModsText"></p>
+              <div class="empty-actions">
+                <button class="btn primary" id="noModsCommands" hidden>Open commands</button>
+              </div>
+            </section>
+
+            <section class="mods" id="modsView" hidden>
+              <div class="mods-toolbar">
+                <nav class="cat-tabs" id="modCats" aria-label="Mod categories"></nav>
+                <div class="mods-tools">
+                  <input class="field search" id="modSearch" type="search" placeholder="Search mods" autocomplete="off">
+                  <button class="btn small" id="loadTableBtn">Load table</button>
+                </div>
+              </div>
+              <div class="profiles" id="profiles">
+                <span class="profiles-label">Saved mods</span>
+                <select class="field profile-select" id="profileSelect" aria-label="Saved mods"></select>
+                <span class="dirty" id="profileDirty" hidden>Unsaved changes</span>
+                <button class="btn small" id="profileSave" title="Save the current mods to this set">Save</button>
+                <button class="btn small ghost" id="profileSaveAs">Save as new</button>
+                <div class="menu-wrap">
+                  <button class="btn small ghost" id="profileMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-label="More options">⋯</button>
+                  <div class="menu" id="profileMenu" role="menu" hidden>
+                    <button role="menuitem" id="profileRename">Rename</button>
+                    <button role="menuitem" id="profileDelete" class="danger">Delete</button>
+                    <label class="menu-check"><input type="checkbox" id="autoApply"> Turn these mods on when the game starts</label>
+                  </div>
+                </div>
+                <span class="mods-count" id="modsCount"></span>
+              </div>
+              <div class="mods-list" id="modsList"></div>
+            </section>
+          </section>
+
+      <section class="pane lib" id="libraryView" hidden>
         <p class="page-empty lib-empty" id="libUnavailable" hidden></p>
         <div class="lib-shell" id="libShell" hidden>
           <aside class="lib-rail">
@@ -138,11 +163,11 @@
         </div>
       </section>
 
-      <section class="page cmd-page" id="commandsView" hidden>
+      <section class="pane page cmd-page" id="commandsView" hidden>
         <header class="page-head">
           <div>
             <h1>Commands</h1>
-            <p id="cmdSub">Pick what you want, set the details, and Keystone runs the admin command for you.</p>
+            <p id="cmdSub">Pick what you want, set the details, and Keystone runs the command for you.</p>
           </div>
           <div class="cmd-head-actions">
             <button class="btn" id="cmdLogin" hidden>Log in as admin</button>
@@ -249,7 +274,7 @@
         </div>
       </section>
 
-      <section class="page" id="overlayView" hidden>
+      <section class="pane page" id="overlayView" hidden>
         <header class="page-head">
           <div>
             <h1>In-game overlay</h1>
@@ -270,6 +295,8 @@
           <div><dt>Ctrl+Shift+O</dt><dd>Show or hide</dd></div>
           <div><dt>Ctrl+Shift+E</dt><dd>Edit layout</dd></div>
           <div><dt>Ctrl+Shift+W</dt><dd>Drop a waypoint where you stand</dd></div>
+          <div><dt>Ctrl+Shift+G</dt><dd>Teleport to the tracked waypoint</dd></div>
+          <div id="hkFindMe" hidden><dt>Ctrl+Shift+F</dt><dd>Find me (puts you on the minimap)</dd></div>
         </dl>
         <p class="page-error" id="ovHotkeyErrors" hidden></p>
 
@@ -278,12 +305,32 @@
         <div id="ovGame" hidden>
           <section class="block">
             <h2>Where you are</h2>
-            <p class="block-note">Pick the mods that hold your character's coordinates. Height and facing are optional; facing turns the arrow on the minimap.</p>
-            <div class="role-grid">
-              <label>X <select class="field role" data-role="x"></select></label>
-              <label>Y <select class="field role" data-role="y"></select></label>
-              <label>Height <select class="field role" data-role="z"></select></label>
-              <label>Facing <select class="field role" data-role="facing"></select></label>
+            <div id="rolesBox">
+              <p class="block-note">Pick the mods that hold your character's coordinates. Height and facing are optional; facing turns the arrow on the minimap.</p>
+              <div class="role-grid">
+                <label>X <select class="field role" data-role="x"></select></label>
+                <label>Y <select class="field role" data-role="y"></select></label>
+                <label>Height <select class="field role" data-role="z"></select></label>
+                <label>Facing <select class="field role" data-role="facing"></select></label>
+              </div>
+            </div>
+            <div class="here-box" id="hereBox">
+              <p class="block-note" id="hereNote"></p>
+              <div class="here-tools">
+                <button class="btn small primary" id="findMeBtn" hidden>Find me</button>
+                <button class="btn small" id="hereBtn">I'm here: click the map</button>
+                <button class="btn small ghost" id="hereClear" hidden>Clear</button>
+              </div>
+              <details class="lineup" id="lineUp" hidden>
+                <summary>Marker in the wrong spot?</summary>
+                <p class="block-note">Stand somewhere away from the middle of the map, press <strong>Find me</strong>, then open your in-game map and type the latitude and longitude it shows for where you're standing. Keystone works out this map's scale from that, once.</p>
+                <div class="edge-grid">
+                  <label>Lat <input class="field" id="luLat" inputmode="decimal" autocomplete="off"></label>
+                  <label>Lon <input class="field" id="luLon" inputmode="decimal" autocomplete="off"></label>
+                  <button class="btn small" id="luSave">Line up</button>
+                  <button class="btn small ghost" id="luReset" hidden>Use the pack's values</button>
+                </div>
+              </details>
             </div>
             <p class="live-pos" id="ovPos"></p>
           </section>
@@ -291,6 +338,7 @@
           <section class="block">
             <h2>Map</h2>
             <div class="map-tools">
+              <label class="inline-field" id="variantRow" hidden>Map <select class="field" id="variantSel"></select></label>
               <button class="btn small" id="mapChoose">Choose map image</button>
               <button class="btn small" id="mapCalibrate">Line up the map</button>
               <button class="btn small ghost" id="mapReset" hidden>Use the pack's map</button>
@@ -301,6 +349,8 @@
               <canvas id="mapPreview" width="760" height="420"></canvas>
               <p class="map-empty" id="mapEmpty">No map yet. Use a screenshot of the game's world map, then line it up with two clicks.</p>
             </div>
+            <div class="layer-list" id="layerList" hidden></div>
+            <p class="block-note" id="markerCredits" hidden></p>
             <details class="map-edges">
               <summary>Type the map edges instead</summary>
               <p class="block-note">World coordinates at each edge of the image. If north is up but Y grows southward in your game, Top is smaller than Bottom.</p>
@@ -349,6 +399,9 @@
         </div>
       </section>
 
+        </div>
+      </section>
+
       <section class="page" id="settingsView" hidden>
         <header class="page-head">
           <div>
@@ -358,12 +411,20 @@
         </header>
 
         <section class="block">
+          <h2>Accent color</h2>
+          <p class="block-note">Used for switches, highlights and buttons across Keystone, the overlay and the phone remote.</p>
+          <div class="swatches" id="swatches" role="radiogroup" aria-label="Accent color"></div>
+        </section>
+
+        <section class="block">
           <h2>Running in the background</h2>
           <div class="settings-list">
             <label class="check"><input type="checkbox" id="setTray"> Keep running in the system tray when I close the window</label>
             <p class="block-note">Recommended. The overlay, phone remote and hotkeys only work while Keystone is running. Quit from the tray icon's menu.</p>
             <label class="check"><input type="checkbox" id="setLogin"> Start Keystone when Windows starts</label>
             <p class="block-note" id="loginNote">It starts quietly in the tray.</p>
+            <label class="check"><input type="checkbox" id="setAuto"> Attach to games automatically when they start</label>
+            <p class="block-note">Works however the game was started. Mods for offline-only games still stay off until you turn them on for that game.</p>
           </div>
         </section>
 
@@ -444,6 +505,19 @@
     </form>
   </dialog>
 
+  <dialog class="modal" id="keyDialog">
+    <form method="dialog">
+      <h2 id="keyTitle">Set a hotkey</h2>
+      <p class="key-hint">Press the keys you want, like <kbd>F6</kbd>, <kbd>Num 1</kbd> or <kbd>Ctrl</kbd> + <kbd>1</kbd>. Esc cancels.</p>
+      <div class="key-preview" id="keyPreview" aria-live="polite">Waiting for keys…</div>
+      <p class="modal-error" id="keyError" hidden></p>
+      <div class="modal-actions">
+        <button class="btn ghost" value="remove" id="keyRemove">Remove hotkey</button>
+        <button class="btn ghost" value="cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog class="modal" id="confirmDialog">
     <form method="dialog">
       <p id="confirmText"></p>
@@ -455,6 +529,7 @@
   </dialog>
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script src="../shared/theme.js"></script>
   <script src="../shared/map-math.js"></script>
   <script src="app.js"></script>
 </body>

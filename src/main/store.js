@@ -14,6 +14,8 @@ const DEFAULTS = () => ({
   tables: [],          // absolute paths of .CT files to reload on attach
   overlay: OVERLAY_DEFAULTS(),
   library: { notes: {} },  // "catalog:id" -> your note
+  hotkeys: {},         // record id -> accelerator ("Ctrl+num1")
+  pinned: [],          // record ids shown first and in the overlay's Mods panel
 });
 
 // null means "use the game pack's value" until the user changes it.
@@ -31,6 +33,7 @@ const OVERLAY_DEFAULTS = () => ({
     readouts: { x: 0.015, y: 0.03, visible: true },
     minimap: { x: 0.80, y: 0.03, visible: true, size: 'm' },
     info: { x: 0.015, y: 0.32, visible: true },
+    mods: { x: 0.80, y: 0.45, visible: true },
   },
 });
 

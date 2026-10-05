@@ -35,12 +35,13 @@ const MAX_FAILS = 10;           // bad tokens per address...
 const FAIL_WINDOW_MS = 60_000;  // ...per minute before we stop listening to it
 
 class RemoteServer extends EventEmitter {
-  constructor({ controller, webDir, sharedDir, getToken }) {
+  constructor({ controller, webDir, sharedDir, getToken, getAppearance }) {
     super();
     this.controller = controller;
     this.webDir = webDir;
     this.sharedDir = sharedDir;
     this.getToken = getToken;
+    this.getAppearance = getAppearance || (() => null);
     this.server = null;
     this.wss = null;
     this.port = null;
@@ -73,6 +74,9 @@ class RemoteServer extends EventEmitter {
         this.wss = wss;
         this.port = server.address().port;
         this.controller.on('structure', this._onStructure);
+        // Waypoint changes come as 'overlay' events; the phone's Teleport
+        // list rides on the snapshot.
+        this.controller.on('overlay', this._onStructure);
         this.controller.on('values', this._onValues);
         // Phones drop off Wi-Fi when the screen locks without closing the
         // socket. Ping every 20 s and drop the ones that stop answering so the
@@ -92,6 +96,7 @@ class RemoteServer extends EventEmitter {
 
   stop() {
     this.controller.off('structure', this._onStructure);
+    this.controller.off('overlay', this._onStructure);
     this.controller.off('values', this._onValues);
     clearTimeout(this._structureTimer);
     clearInterval(this._heartbeat);
@@ -172,6 +177,8 @@ class RemoteServer extends EventEmitter {
     ws.on('message', (raw) => this._onMessage(ws, raw));
     ws.on('close', () => this.emit('clients', this.clientCount));
     this._send(ws, { type: 'snapshot', data: this.controller.snapshot() });
+    const look = this.getAppearance();
+    if (look) this._send(ws, { type: 'appearance', data: look });
     this.emit('clients', this.clientCount);
   }
 
@@ -197,6 +204,10 @@ class RemoteServer extends EventEmitter {
         case 'apply': c.applyValue(String(msg.id), msg.value); return reply(true);
         case 'applyProfile': return reply(true, { data: c.applyProfile(String(msg.name)) });
         case 'saveProfile': return reply(true, { data: c.saveProfile(String(msg.name)) });
+        case 'teleport':
+          c.overlay.teleport({ waypointId: String(msg.waypointId) })
+            .then((r) => reply(true, { data: { name: r.name } }), (err) => reply(false, { error: err.message }));
+          return undefined;
         case 'ping': return reply(true);
         default: return reply(false, { error: `Unknown command "${msg.type}"` });
       }
@@ -210,6 +221,10 @@ class RemoteServer extends EventEmitter {
   _scheduleSnapshot() {
     clearTimeout(this._structureTimer);
     this._structureTimer = setTimeout(() => this._broadcast({ type: 'snapshot', data: this.controller.snapshot() }), 40);
+  }
+
+  broadcast(msg) {
+    this._broadcast(msg);
   }
 
   _broadcast(msg) {

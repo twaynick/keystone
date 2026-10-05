@@ -7,6 +7,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
 
 contextBridge.exposeInMainWorld('browserApi', {
+  appearance: () => invoke('app:appearance'),
+  onAppearance: (cb) => {
+    const l = (_e, a) => cb(a);
+    ipcRenderer.on('app:appearance', l);
+    return () => ipcRenderer.removeListener('app:appearance', l);
+  },
   state: () => invoke('browser:state'),
   setOpacity: (v) => invoke('browser:opacity', v),
   setOnTop: (on) => invoke('browser:onTop', on),

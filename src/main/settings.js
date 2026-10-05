@@ -27,7 +27,7 @@ class Settings {
     const defaults = {
       remote: { enabled: false, port: DEFAULT_PORT, token: newToken(), host: null },
       overlay: { enabled: false, onlyOverGame: true },
-      general: { closeToTray: true, startWithWindows: false, trayHintShown: false },
+      general: { closeToTray: true, startWithWindows: false, trayHintShown: false, accent: 'keystone', autoAttach: true },
     };
     try {
       const raw = JSON.parse(fs.readFileSync(this.file, 'utf8'));

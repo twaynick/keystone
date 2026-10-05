@@ -10,6 +10,9 @@ function on(channel, cb) {
 }
 
 contextBridge.exposeInMainWorld('overlayApi', {
+  appearance: () => invoke('app:appearance'),
+  onAppearance: (cb) => on('app:appearance', cb),
+  quickAction: (id) => invoke('mod:quick', id),
   onState: (cb) => on('overlay:state', cb),
   onValues: (cb) => on('overlay:values', cb),
   onMode: (cb) => on('overlay:mode', cb),
@@ -17,6 +20,8 @@ contextBridge.exposeInMainWorld('overlayApi', {
   setPanel: (id, patch) => invoke('overlay:setPanel', id, patch),
   addWaypoint: (wp) => invoke('overlay:addWaypoint', wp),
   setTracked: (id) => invoke('overlay:setTracked', id),
+  teleportTo: (pos) => invoke('overlay:teleportTo', pos),
+  setHere: (pos) => invoke('overlay:setHere', pos),
   setZoom: (z) => invoke('overlay:setZoom', z),
   finishEditing: () => invoke('overlay:edit', false),
 });

@@ -32,6 +32,9 @@ body.editing .edit-only { display: flex; }
   background: var(--ink); color: var(--muted); font-size: 11px; cursor: pointer;
 }
 .size-btns button.on { border-color: var(--accent); color: var(--accent); }
+.tool-btns button { width: auto; padding: 0 6px; }
+.map-foot .coords { white-space: nowrap; }
+.map-foot .coords.manual { color: var(--faint); }
 
 /* ---- readouts ---- */
 .readouts { list-style: none; margin: 0; padding: 6px 10px 8px; min-width: 190px; }
@@ -72,3 +75,15 @@ body.editing .minimap-panel canvas { cursor: crosshair; }
   padding: 9px 16px; border-radius: 8px; z-index: 10;
   background: rgba(18, 22, 27, 0.94); border: 1px solid var(--line-strong); color: var(--text);
 }
+
+/* ---- pinned mods ---- */
+.omods { list-style: none; margin: 0; padding: 6px; min-width: 230px; }
+.omods li { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 10px; }
+body.editing .omods li { cursor: pointer; }
+body.editing .omods li:hover { background: rgba(255, 255, 255, 0.06); }
+.omods .bolt-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.omods li.on .bolt-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+.omods .name { flex: 1; color: var(--text); }
+.omods .hk { color: var(--faint); font: 500 11px var(--font-mono); }
+.omods .state { min-width: 30px; text-align: right; color: var(--faint); font-weight: 600; font-size: 12px; }
+.omods li.on .state { color: var(--accent); }

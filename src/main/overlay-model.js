@@ -88,7 +88,17 @@ class OverlayModel {
     return true;
   }
 
+  // Live position from the game's memory, or null. livePosition() in
+  // values() is this; position() falls back to "I'm here" for things like
+  // dropping a waypoint where you are.
   position() {
+    const live = this.livePosition();
+    if (live) return live;
+    const h = this.game ? this.here() : null;
+    return h ? { x: h.x, y: h.y, z: h.z, facing: null, manual: true } : null;
+  }
+
+  livePosition() {
     if (!this.session) return null;
     const roles = this.roles();
     const read = (id) => {
@@ -101,12 +111,62 @@ class OverlayModel {
     return { x, y, z: read(roles.z), facing: read(roles.facing) };
   }
 
-  // ---------- map ----------
-  map() {
+  // ---------- map variants ----------
+  // Games with several worlds (ARK) have one variant per map; everything else
+  // has a single variant. Packless games get a blank one so a custom map
+  // image still works.
+  variants() {
+    const list = this.pack?.maps || [];
+    return list.length ? list : [{ id: 'default', name: 'Map', units: 'xy', image: null, bounds: null, coords: null, markers: { credits: null, layers: [] } }];
+  }
+
+  variant() {
+    const list = this.variants();
+    return list.find((v) => v.id === this._data().variant) || list[0];
+  }
+
+  setVariant(id) {
+    this._require();
+    if (!this.variants().some((v) => v.id === id)) throw new Error('That map isn’t in this game’s pack.');
+    this._update((ov) => { ov.variant = id; });
+    return this.variant();
+  }
+
+  // Custom map images are kept per variant. Older settings files had one
+  // custom map per game (ov.map); it belongs to the first variant.
+  _custom(vid) {
     const ov = this._data();
-    const m = ov.map || this.pack?.map || null;
-    if (!m?.image || !fs.existsSync(m.image)) return null;
-    return { image: m.image, bounds: MapMath.validBounds(m.bounds) ? m.bounds : null, custom: Boolean(ov.map) };
+    if (ov.customMaps && vid in ov.customMaps) return ov.customMaps[vid];
+    return vid === this.variants()[0].id ? ov.map : null;
+  }
+
+  _setCustom(fn) {
+    const vid = this.variant().id;
+    const first = this.variants()[0].id;
+    this._update((ov) => {
+      const all = { ...(ov.customMaps || {}) };
+      if (ov.map && !(first in all)) all[first] = ov.map;
+      ov.map = null;
+      all[vid] = fn(all[vid] || null);
+      ov.customMaps = all;
+    });
+  }
+
+  // ---------- map ----------
+  // { image (path or null), bounds, custom } or null. A lat/lon map has
+  // bounds without an image, so the minimap can draw a grid, markers and
+  // your position before you add a picture.
+  map() {
+    const v = this.variant();
+    const c = this._custom(v.id);
+    const image = [c?.image, v.image].find((p) => p && fs.existsSync(p)) || null;
+    const custom = Boolean(c?.image && image === c.image);
+    // A custom image has its own edges (none until it's lined up): the
+    // pack's edges describe the pack's picture, not the player's screenshot.
+    const b = custom ? c.bounds : v.bounds;
+    const bounds = MapMath.validBounds(b) ? b : null;
+    if (!image && !bounds) return null;
+    return { image, bounds, custom };
   }
 
   setMapImage(srcPath) {
@@ -118,8 +178,11 @@ class OverlayModel {
     // original screenshot doesn't break the minimap.
     const dest = path.join(this.mapsDir, `${this.game.key.replace(/[^a-z0-9._-]/g, '_')}-${Date.now()}${ext}`);
     fs.copyFileSync(srcPath, dest);
-    const old = this._data().map?.image;
-    this._update((ov) => { ov.map = { image: dest, bounds: null }; });
+    const old = this._custom(this.variant().id)?.image;
+    // A lat/lon map keeps its edges: a screenshot of the whole in-game map
+    // usually lines up already, and "Line up the map" can fix it if not.
+    const keep = this.variant().units === 'latlon' ? this.variant().bounds : null;
+    this._setCustom(() => ({ image: dest, bounds: keep }));
     if (old && old.startsWith(this.mapsDir) && old !== dest) fs.rm(old, { force: true }, () => {});
     return this.map();
   }
@@ -129,8 +192,8 @@ class OverlayModel {
     const b = { left: Number(bounds.left), right: Number(bounds.right), top: Number(bounds.top), bottom: Number(bounds.bottom) };
     if (!MapMath.validBounds(b)) throw new Error('Each edge needs a number, and opposite edges can’t be equal.');
     const m = this.map();
-    if (!m) throw new Error('Choose a map image first.');
-    this._update((ov) => { ov.map = { image: m.image, bounds: b }; });
+    if (!m?.image) throw new Error('Choose a map image first.');
+    this._setCustom((c) => ({ image: c?.image || m.image, bounds: b }));
     return b;
   }
 
@@ -141,14 +204,154 @@ class OverlayModel {
 
   resetMap() {
     this._require();
-    const old = this._data().map?.image;
-    this._update((ov) => { ov.map = null; });
+    const old = this._custom(this.variant().id)?.image;
+    this._setCustom(() => null);
     if (old && old.startsWith(this.mapsDir)) fs.rm(old, { force: true }, () => {});
     return this.map();
   }
 
+  // ---------- marker layers ----------
+  layers() {
+    const v = this.variant();
+    const shown = this._data().layers?.[v.id] || {};
+    return v.markers.layers.map((l) => ({ ...l, on: shown[l.id] ?? l.on }));
+  }
+
+  setLayer(layerId, on) {
+    this._require();
+    const v = this.variant();
+    if (!v.markers.layers.some((l) => l.id === layerId)) throw new Error('That marker layer isn’t in this map.');
+    this._update((ov) => {
+      const all = { ...(ov.layers || {}) };
+      all[v.id] = { ...(all[v.id] || {}), [layerId]: Boolean(on) };
+      ov.layers = all;
+    });
+    return true;
+  }
+
+  // ---------- "I'm here" ----------
+  // A position set by hand (clicking the map) or by Find me. It's for games
+  // where Keystone can't read your position: online games, or offline-only
+  // games with mods off. It stays where it was put; it doesn't follow you.
+  here() {
+    const h = this._data().here;
+    return h && h.variant === this.variant().id ? h : null;
+  }
+
+  setHere({ x, y } = {}) {
+    this._require();
+    const p = { x: Number(x), y: Number(y) };
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) throw new Error('That spot has no usable coordinates.');
+    const here = { variant: this.variant().id, x: p.x, y: p.y, z: null, source: 'click', at: Date.now(), raw: null };
+    this._update((ov) => { ov.here = here; });
+    return here;
+  }
+
+  clearHere() {
+    this._require();
+    this._update((ov) => { ov.here = null; });
+    return true;
+  }
+
+  // ---------- Find me (ARK's ccc) ----------
+  coords() {
+    const v = this.variant();
+    return this._data().coordFix?.[v.id] || v.coords;
+  }
+
+  // Runs the pack's command (ccc), which makes the game copy "X Y Z ..." to
+  // the clipboard, reads it back and converts it to this map's lat/lon.
+  // The clipboard is put back afterwards: borrowing it is a side effect the
+  // player didn't ask for.
+  async findMe({ timeoutMs = 3000, pollMs = 100 } = {}) {
+    this._require();
+    const spec = this.pack?.findMe;
+    if (!spec) throw new Error('This game has no Find me command.');
+    const conv = this.coords();
+    if (!conv) throw new Error(`Find me doesn’t know ${this.variant().name}’s coordinates.`);
+    const clip = this.c.clipboard;
+    if (!clip) throw new Error('Find me needs the clipboard, which isn’t available here.');
+    const saved = clip.readText();
+    clip.writeText('');
+    let raw = null;
+    try {
+      // Typed, never pasted: paste mode puts the old clipboard back after
+      // pressing Enter, which can land on top of what ccc just copied.
+      await this.c.commands.runBuilt([spec.command], 'console', 'Find me', { mode: 'type' });
+      const until = Date.now() + timeoutMs;
+      while (!raw && Date.now() < until) {
+        await new Promise((r) => setTimeout(r, pollMs));
+        raw = parseCoords(clip.readText());
+      }
+    } finally {
+      clip.writeText(saved);
+    }
+    if (!raw) throw new Error('The game didn’t copy a position. Check you’re logged in as admin (the command needs cheat access), then try again.');
+    const pos = ueToMap(raw, conv);
+    const here = { variant: this.variant().id, x: pos.x, y: pos.y, z: raw.z, source: 'findme', at: Date.now(), raw };
+    this._update((ov) => { ov.here = here; });
+    return here;
+  }
+
+  // "Line it up": the player types the lat/lon their in-game map shows for
+  // the spot Find me just read. Shifts stay as the pack has them; only the
+  // scale is solved, per axis.
+  lineUpFindMe({ lat, lon }) {
+    this._require();
+    const h = this.here();
+    if (!h?.raw) throw new Error('Press Find me first, then type the latitude and longitude your in-game map shows for that spot.');
+    const conv = this.coords();
+    const shown = { lat: Number(lat), lon: Number(lon) };
+    if (!Number.isFinite(shown.lat) || !Number.isFinite(shown.lon)) throw new Error('Type both numbers.');
+    const div = (rawVal, shownVal, shift) => {
+      // Near the map's centre a tiny typing difference swings the scale a
+      // lot, and the raw value is near zero too.
+      if (Math.abs(shownVal - shift) < 5 || Math.abs(rawVal) < 1000) return null;
+      const d = rawVal / (shownVal - shift);
+      return d > 0 ? d : null;
+    };
+    const latDiv = div(h.raw.y, shown.lat, conv.lat.shift);
+    const lonDiv = div(h.raw.x, shown.lon, conv.lon.shift);
+    if (!latDiv || !lonDiv) throw new Error('Stand somewhere farther from the middle of the map (at least 5 away from its centre on both numbers), press Find me, then try again.');
+    // Averaging the axes: the game uses one scale for both on every map we
+    // know, and the average halves the effect of the shown values' rounding.
+    const fixed = conv.lat.div === conv.lon.div
+      ? { lat: { ...conv.lat, div: (latDiv + lonDiv) / 2 }, lon: { ...conv.lon, div: (latDiv + lonDiv) / 2 } }
+      : { lat: { ...conv.lat, div: latDiv }, lon: { ...conv.lon, div: lonDiv } };
+    const vid = this.variant().id;
+    const pos = ueToMap(h.raw, fixed);
+    this._update((ov) => {
+      ov.coordFix = { ...(ov.coordFix || {}), [vid]: fixed };
+      ov.here = { ...h, x: pos.x, y: pos.y };
+    });
+    return fixed;
+  }
+
+  resetFindMe() {
+    this._require();
+    const vid = this.variant().id;
+    const h = this.here();
+    this._update((ov) => {
+      const all = { ...(ov.coordFix || {}) };
+      delete all[vid];
+      ov.coordFix = all;
+    });
+    if (h?.raw) {
+      const pos = ueToMap(h.raw, this.coords());
+      this._update((ov) => { ov.here = { ...h, x: pos.x, y: pos.y }; });
+    }
+    return this.coords();
+  }
+
   // ---------- waypoints ----------
+  // Waypoints belong to the map they were made on (ARK's maps share one
+  // game). Ones without a map (older files, pack starters) show on every map.
   waypoints() {
+    const vid = this.variant().id;
+    return this._all().filter((w) => !w.variant || w.variant === vid);
+  }
+
+  _all() {
     return this._data().waypoints || [];
   }
 
@@ -157,20 +360,20 @@ class OverlayModel {
     let pos = { x: Number(x), y: Number(y), z: z ?? null };
     if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
       const here = this.position();
-      if (!here) throw new Error('Keystone doesn’t know where you are. Set the position mods in the Overlay tab first.');
+      if (!here) throw new Error('Keystone doesn’t know where you are. Set the position mods, or click "I\u2019m here" on the map, first.');
       pos = { x: here.x, y: here.y, z: here.z };
     }
-    const list = this.waypoints();
-    if (list.length >= MAX_WAYPOINTS) throw new Error(`That's the limit of ${MAX_WAYPOINTS} waypoints. Delete some first.`);
-    const wp = { id: newId(), name: cleanText(name, 40) || `Waypoint ${list.length + 1}`, ...pos };
-    this._update((ov) => { ov.waypoints = [...list, wp]; });
+    const all = this._all();
+    if (all.length >= MAX_WAYPOINTS) throw new Error(`That's the limit of ${MAX_WAYPOINTS} waypoints. Delete some first.`);
+    const wp = { id: newId(), name: cleanText(name, 40) || `Waypoint ${this.waypoints().length + 1}`, ...pos, variant: this.variant().id };
+    this._update((ov) => { ov.waypoints = [...all, wp]; });
     return wp;
   }
 
   updateWaypoint(id, patch) {
     this._require();
-    const list = this.waypoints();
-    const wp = list.find((w) => w.id === id);
+    const list = this._all();
+    const wp = this.waypoints().find((w) => w.id === id);
     if (!wp) throw new Error('That waypoint no longer exists.');
     const next = { ...wp };
     if (patch.name !== undefined) next.name = cleanText(patch.name, 40) || wp.name;
@@ -186,7 +389,7 @@ class OverlayModel {
   removeWaypoint(id) {
     this._require();
     this._update((ov) => {
-      ov.waypoints = this.waypoints().filter((w) => w.id !== id);
+      ov.waypoints = this._all().filter((w) => w.id !== id);
       if (ov.tracked === id) ov.tracked = null;
     });
     return true;
@@ -197,6 +400,87 @@ class OverlayModel {
     if (id && !this.waypoints().some((w) => w.id === id)) throw new Error('That waypoint no longer exists.');
     this._update((ov) => { ov.tracked = id || null; });
     return true;
+  }
+
+  // ---------- teleport ----------
+  // How this game can teleport right now: 'memory' (writing the position
+  // mods), 'command' (the pack's teleport command), or null.
+  //
+  // Memory wins when both work: it's instant and needs no console. Commands
+  // need the pack to have a console or RCON set up.
+  teleportMethod() {
+    if (!this.game) return null;
+    const roles = this.roles();
+    if (this.session && roles.x && roles.y) return 'memory';
+    if (this.pack?.teleport?.command && this.pack.commands) return 'command';
+    return null;
+  }
+
+  async teleport(target = {}) {
+    this._require();
+    let to;
+    if (target.waypointId) {
+      const wp = this.waypoints().find((w) => w.id === target.waypointId);
+      if (!wp) throw new Error('That waypoint no longer exists.');
+      to = { x: wp.x, y: wp.y, z: wp.z ?? null, name: wp.name };
+    } else {
+      to = { x: Number(target.x), y: Number(target.y), z: target.z === undefined || target.z === null || target.z === '' ? null : Number(target.z), name: null };
+    }
+    if (![to.x, to.y].every(Number.isFinite) || (to.z !== null && !Number.isFinite(to.z))) throw new Error('That spot has no usable coordinates.');
+
+    const method = this.teleportMethod();
+    if (method === 'memory') return { method, ...this._teleportByMemory(to) };
+    if (method === 'command') return { method, ...(await this._teleportByCommand(to)) };
+    if (this.session) throw new Error('Set the X and Y position mods in the Overlay tab first, so Keystone knows what to write.');
+    throw new Error(this.c.modsBlocked() === 'offline-off'
+      ? 'Teleporting writes your position, which needs mods. Turn mods on for this game first.'
+      : 'Teleporting needs mods with position values, and they aren’t available for this game.');
+  }
+
+  _teleportByMemory(to) {
+    const s = this.session;
+    const roles = this.roles();
+    const opts = this.pack?.teleport || { lift: 0, holdMs: 300 };
+    let z = to.z;
+    if (z === null && roles.z) {
+      // No height saved: keep the current height (plus the pack's lift).
+      const cur = this.livePosition()?.z;
+      z = Number.isFinite(cur) ? cur + (opts.lift || 0) : null;
+    }
+    const writes = [[roles.x, to.x], [roles.y, to.y]];
+    if (roles.z && z !== null) writes.push([roles.z, z]);
+
+    // Hold the new position for a moment (see holdMs in packs.js). A value
+    // the person had locked stays locked, at the new spot, or their own lock
+    // would pull them straight back.
+    const restore = [];
+    for (const [id, v] of writes) {
+      const st = s.state.get(id);
+      restore.push({ id, wasEnabled: st.enabled, oldTarget: st.target });
+      s.setTarget(id, v);
+      s.setEnabled(id, true);
+    }
+    const release = () => {
+      if (this.session !== s) return; // game closed or switched meanwhile
+      for (const r of restore) {
+        if (r.wasEnabled) continue;
+        try { s.setEnabled(r.id, false); s.setTarget(r.id, r.oldTarget); } catch { /* record gone */ }
+      }
+    };
+    if (opts.holdMs > 0) setTimeout(release, opts.holdMs).unref?.(); else release();
+    return { x: to.x, y: to.y, z, name: to.name };
+  }
+
+  async _teleportByCommand(to) {
+    const t = this.pack.teleport;
+    const num = (n) => String(Math.round(n * 100) / 100);
+    const vars = { x: num(to.x), y: num(to.y), z: to.z === null ? null : num(to.z) };
+    const lines = t.command
+      .filter((l) => vars.z !== null || !l.includes('{z}'))
+      .map((l) => l.replace(/\{(x|y|z)\}/g, (_, k) => vars[k]));
+    if (!lines.length) throw new Error('This game’s teleport command needs a height, and this spot doesn’t have one.');
+    await this.c.commands.runBuilt(lines, t.via, to.name ? `Teleport: ${to.name}` : 'Teleport');
+    return { x: to.x, y: to.y, z: to.z, name: to.name };
   }
 
   // ---------- readouts, notes, layout ----------
@@ -241,36 +525,72 @@ class OverlayModel {
     const recs = new Map((this.session?.records || []).map((r) => [r.id, r]));
     return {
       attached: true,
-      mods: Boolean(this.session),
+      // (Was also called "mods", which the pinned-mods list below overwrote.)
+      session: Boolean(this.session),
       game: this.game.demo ? 'Demo game' : this.game.name.replace(/\.exe$/i, ''),
       pack: this.pack ? this.pack.name : null,
       roles: this.roles(),
+      teleport: this.teleportMethod(),
       map: map ? {
         // Served by the ksmap:// protocol in main.js; mtime busts the image cache
-        // when the user picks a new map.
-        url: `ksmap://map/${encodeURIComponent(this.game.key)}?v=${fs.statSync(map.image).mtimeMs}`,
+        // when the user picks a new map. No image: a lat/lon map with edges only.
+        url: map.image ? `ksmap://map/${encodeURIComponent(this.game.key)}?v=${fs.statSync(map.image).mtimeMs}-${encodeURIComponent(this.variant().id)}` : null,
         bounds: map.bounds,
         custom: map.custom,
       } : null,
+      variants: this.variants().map((v) => ({ id: v.id, name: v.name })),
+      variant: { id: this.variant().id, name: this.variant().name, units: this.variant().units },
+      layers: this.layers(),
+      markerCredits: this.variant().markers.credits,
+      here: this.here(),
+      findMe: Boolean(this.pack?.findMe && this.coords()),
+      findMeFixed: Boolean(this._data().coordFix?.[this.variant().id]),
       waypoints: this.waypoints(),
       tracked: ov.tracked,
       readouts: ov.readouts.filter((id) => recs.has(id)).map((id) => ({ id, name: recs.get(id).name, valueType: recs.get(id).valueType })),
       info: this.pack?.info || [],
+      // Pinned mods for the overlay's Mods panel.
+      mods: this._pinnedMods(),
       notes: ov.notes,
       panels: ov.panels,
       zoom: ov.zoom,
     };
   }
 
+  _pinnedMods() {
+    if (!this.session) return [];
+    const snap = this.c.snapshot();
+    return snap.records.filter((r) => r.pinned && r.kind === 'value')
+      .map((r) => ({ id: r.id, label: r.label || r.name, hotkey: r.hotkey || null, control: r.ui?.control || 'default' }));
+  }
+
   values() {
-    if (!this.game || !this.session) return { pos: null, readouts: {} };
+    if (!this.game || !this.session) return { pos: null, readouts: {}, mods: {} };
+    const mods = {};
+    for (const id of this.c.store.load(this.game.key).pinned || []) {
+      const st = this.session.state.get(id);
+      if (st) mods[id] = { enabled: st.enabled, current: st.current, status: st.status };
+    }
     const out = {};
     for (const id of this._data().readouts) {
       const st = this.session.state.get(id);
       if (st) out[id] = { current: st.current, status: st.status, enabled: st.enabled };
     }
-    return { pos: this.position(), readouts: out };
+    return { pos: this.livePosition(), readouts: out, mods };
   }
+}
+
+// ccc copies "X Y Z Yaw Pitch" (game units, then angles). Only X, Y and Z
+// are used: sources disagree on the order of the two angles, and a wrong
+// facing arrow is worse than none.
+function parseCoords(text) {
+  const m = String(text || '').trim().match(/^(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)(?:\s|$)/);
+  return m ? { x: Number(m[1]), y: Number(m[2]), z: Number(m[3]) } : null;
+}
+
+// Game units -> map lat/lon (world x = lon, y = lat).
+function ueToMap(raw, conv) {
+  return { x: raw.x / conv.lon.div + conv.lon.shift, y: raw.y / conv.lat.div + conv.lat.shift };
 }
 
 function newId() {
@@ -286,4 +606,4 @@ function clamp01(v) {
   return Number.isFinite(n) ? Math.min(0.98, Math.max(0, n)) : 0;
 }
 
-module.exports = { OverlayModel, ROLES };
+module.exports = { OverlayModel, ROLES, parseCoords, ueToMap };

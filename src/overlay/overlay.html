@@ -9,7 +9,7 @@
 </head>
 <body>
   <div class="edit-banner" id="editBanner" hidden>
-    <span>Editing overlay. Drag panels by their title, click the map to add a waypoint, scroll on the map to zoom.</span>
+    <span id="editHelp">Editing overlay. Drag panels by their title, click the map to add a waypoint, scroll on the map to zoom.</span>
     <button class="btn small primary" id="doneBtn">Done</button>
   </div>
 
@@ -21,6 +21,10 @@
   <section class="panel minimap-panel" id="panel-minimap" data-panel="minimap" hidden>
     <header class="panel-head">
       <span id="mapTitle">Map</span>
+      <span class="edit-only size-btns tool-btns" role="group" aria-label="Clicking the map">
+        <button data-tool="wp" class="on" title="Click the map to add a waypoint">Pin</button>
+        <button data-tool="here" title="Click the map where you are">Here</button>
+      </span>
       <span class="edit-only size-btns">
         <button data-size="s" aria-label="Small map">S</button>
         <button data-size="m" aria-label="Medium map">M</button>
@@ -34,6 +38,11 @@
     </footer>
   </section>
 
+  <section class="panel mods-panel" id="panel-mods" data-panel="mods" hidden>
+    <header class="panel-head"><span>Mods</span></header>
+    <ul class="omods" id="omods"></ul>
+  </section>
+
   <section class="panel info-panel" id="panel-info" data-panel="info" hidden>
     <header class="panel-head"><span id="infoTitle">Info</span></header>
     <div class="info-body" id="info"></div>
@@ -41,6 +50,7 @@
 
   <div class="flash" id="flash" hidden></div>
 
+  <script src="../shared/theme.js"></script>
   <script src="../shared/map-math.js"></script>
   <script src="overlay.js"></script>
 </body>

@@ -112,11 +112,12 @@ function asa({ consoleSend } = {}) {
 
 test('a game whose memory is off-limits is still selected, minus mods', () => {
   const { c } = asa();
-  // On Linux WinMemory always throws, standing in for a BattlEye refusal.
-  const { snapshot, notices } = c.attach({ pid: 4242, name: 'ArkAscended.exe' });
+  // Fallout 4 allows mods, so Keystone tries; on Linux WinMemory always
+  // throws, standing in for a game that refuses access.
+  const { snapshot, notices } = c.attach({ pid: 4242, name: 'Fallout4.exe' });
   assert.equal(snapshot.attached, true);
   assert.equal(snapshot.mods, false);
-  assert.equal(snapshot.pack, 'ARK: Survival Ascended');
+  assert.equal(snapshot.pack, 'Fallout 4');
   assert.equal(snapshot.hasCommands, true);
   assert.ok(notices[0].includes('Commands, the map and waypoints still work'));
   assert.throws(() => c.saveProfile('x'), /Mods aren't available/);
@@ -191,7 +192,7 @@ test('console commands go to the game window with the saved key and mode', async
   c.attach({ pid: 4242, name: 'ArkAscended.exe' });
   c.commands.setSettings({ consoleKey: 'Backquote', mode: 'paste' });
   await c.commands.run('quick', 'fly');
-  assert.deepEqual(calls[0], { pid: 4242, lines: ['admincheat Fly'], opts: { consoleKey: 'Backquote', mode: 'paste' } });
+  assert.deepEqual(calls[0], { pid: 4242, lines: ['admincheat Fly'], opts: { consoleKey: 'Backquote', mode: 'paste', keepsOpen: false } });
   assert.equal(c.commands.history()[0].label, 'Fly');
   assert.equal(c.commands.history()[0].ok, true);
 });
@@ -251,4 +252,38 @@ test('games without a commands section say so', () => {
   c.attach({ demo: true });
   assert.equal(c.commands.info().available, false);
   assert.throws(() => c.commands.build('quick', 'god'), /no commands for this game/);
+});
+
+test('console plan for games whose console stays open: open once, close at the end', () => {
+  const steps = plan(['tgm', 'tcl'], { consoleKey: 'Backquote', keepsOpen: true }).filter((s) => !s.wait);
+  assert.deepEqual(steps, [
+    { key: 'Backquote' }, { text: 'tgm' }, { key: 'Enter' }, { text: 'tcl' }, { key: 'Enter' }, { key: 'Backquote' },
+  ]);
+});
+
+test('Fallout 4 pack: item commands, quick commands with choices, no paste', async () => {
+  const { c, calls } = asa();
+  c.attach({ pid: 777, name: 'Fallout4.exe' });
+  const info = c.commands.info();
+  assert.equal(info.pack, 'Fallout 4');
+  assert.equal(info.settings.consoleKey, 'Backquote');
+  assert.equal(info.settings.pasteSupported, false);
+  assert.equal(info.settings.canEnable, false);
+  assert.throws(() => c.commands.setSettings({ mode: 'paste' }), /can.t paste/);
+
+  const items = c.commands.catalog('items');
+  assert.ok(items.length > 500);
+  assert.ok(items.every((i) => /^00[0-9A-F]{6}$/.test(i.id)), 'base-game Form IDs only');
+  assert.equal(new Set(items.map((i) => i.id)).size, items.length);
+  const stim = items.find((i) => i.name === 'Stimpak');
+  assert.equal(stim.id, '00023736');
+
+  assert.deepEqual(c.commands.build('action', 'give-item', { entryId: stim.id, values: { qty: 10 } }).lines, ['player.additem 00023736 10']);
+  assert.deepEqual(c.commands.build('quick', 'perks', { values: { points: 3 } }).lines, ['CGF "Game.AddPerkPoints" 3']);
+  assert.deepEqual(c.commands.build('quick', 'special', { values: { stat: 'luck', value: 10 } }).lines, ['player.setav luck 10']);
+  assert.throws(() => c.commands.build('quick', 'special', { values: { stat: 'charm', value: 10 } }), /Pick a stat/);
+  assert.throws(() => c.commands.build('quick', 'time', { values: { hour: 24 } }), /above 23/);
+
+  await c.commands.run('quick', 'tgm');
+  assert.deepEqual(calls[0], { pid: 777, lines: ['tgm'], opts: { consoleKey: 'Backquote', mode: 'type', keepsOpen: true } });
 });

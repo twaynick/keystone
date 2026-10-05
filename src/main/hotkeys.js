@@ -16,7 +16,7 @@ const SOLO_KEYS = new Set([
   'Insert', 'Delete', 'Home', 'End', 'PageUp', 'PageDown',
 ]);
 const NEEDS_MOD = /^([A-Z0-9]|Up|Down|Left|Right|Space|Tab|Backspace|[`\-=[\];',./\\])$/;
-const RESERVED = new Set(['Ctrl+Shift+O', 'Ctrl+Shift+E', 'Ctrl+Shift+W', 'Ctrl+Shift+B', 'Ctrl+Shift+G']);
+const RESERVED = new Set(['Ctrl+Shift+O', 'Ctrl+Shift+E', 'Ctrl+Shift+W', 'Ctrl+Shift+B', 'Ctrl+Shift+G', 'Ctrl+Shift+F']);
 
 // Returns the normalized accelerator or throws a message for the person.
 function normalize(input) {

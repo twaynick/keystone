@@ -12,6 +12,8 @@ const { loadPacks, findPack } = require('./packs');
 const { OverlayModel } = require('./overlay-model');
 const { CommandsModel } = require('./commands/model');
 const { LibraryModel } = require('./library');
+const hotkeys = require('./hotkeys');
+const { InstalledGames, launchFor } = require('./installed');
 
 // Everything the app can do, independent of Electron. The desktop window
 // calls it over IPC; the phone remote calls the same methods, so both always
@@ -20,8 +22,11 @@ const { LibraryModel } = require('./library');
 const MAX_PROFILE_NAME = 40;
 
 class Controller extends EventEmitter {
-  constructor({ packsDir, dataDir, commands = {} }) {
+  constructor({ packsDir, dataDir, commands = {}, installed = {}, clipboard = null }) {
     super();
+    // Electron's clipboard ({ readText, writeText }); Find me reads ARK's ccc
+    // output from it. Injected so tests can fake it.
+    this.clipboard = clipboard;
     this.packsDir = packsDir;
     // Bundled packs, plus a folder where users can drop their own.
     this.userPacksDir = path.join(dataDir, 'packs');
@@ -33,40 +38,77 @@ class Controller extends EventEmitter {
     this.overlay = new OverlayModel(this, { dataDir });
     this.commands = new CommandsModel(this, commands);
     this.library = new LibraryModel(this, { dataDir });
+    this.installed = new InstalledGames(installed);
   }
 
-  // Games Keystone has a pack for, marked running or not, for the switcher.
+  _packs() {
+    return loadPacks([this.packsDir, this.userPacksDir]);
+  }
+
+  // The library: every pack plus whether (and from which store) it's
+  // installed on this PC.
+  async listGamesWithInstalled() {
+    const games = this.listGames();
+    const hits = await this.installed.match(this._packs().filter((p) => !p.error));
+    // Kept for snapshot(), which is synchronous: the library is always listed
+    // before a game page opens, so this is warm by then.
+    this._installedHits = hits;
+    for (const g of games) {
+      const hit = hits.get(g.id);
+      g.installed = hit ? { store: hit.store, path: hit.path } : null;
+      g.canLaunch = g.canLaunch || Boolean(launchFor(hit));
+    }
+    // Installed (and running) games first, like a launcher's library.
+    return games.sort((a, b) => (a.demo - b.demo) || (b.running - a.running) || (Boolean(b.installed) - Boolean(a.installed)) || a.name.localeCompare(b.name));
+  }
+
+  // Games Keystone has a pack for, marked running or not, for the library.
   listGames() {
-    const running = listProcesses();
+    const running = this.listProcesses(); // via the method so tests can stub it
     return loadPacks([this.packsDir, this.userPacksDir])
-      .filter((p) => !p.error && p.exe.length && !p.exe.includes('demo.exe'))
+      .filter((p) => !p.error && p.exe.length)
       .map((p) => {
-        const proc = running.find((r) => p.exe.includes(r.name.toLowerCase()));
-        return { id: p.id, name: p.name, exe: p.exe[0], running: Boolean(proc), pid: proc?.pid || null };
+        const demo = p.exe.includes('demo.exe');
+        const proc = demo ? null : running.find((r) => p.exe.includes(r.name.toLowerCase()));
+        return {
+          id: p.id,
+          name: p.name,
+          exe: p.exe[0],
+          demo,
+          running: demo ? false : Boolean(proc),
+          pid: proc?.pid || null,
+          hasArt: Boolean(p.art),
+          canLaunch: Boolean(p.launch),
+          offlineOnly: p.offlineOnly,
+          noMods: !p.memory,
+          hasCommands: Boolean(p.commands),
+        };
       })
-      .sort((a, b) => (b.running - a.running) || a.name.localeCompare(b.name));
+      .sort((a, b) => (a.demo - b.demo) || (b.running - a.running) || a.name.localeCompare(b.name));
   }
 
   listProcesses() {
     return listProcesses();
   }
 
-  // Selects a game and, when possible, attaches to its memory for mods.
+  // Selects a game and, when allowed and possible, attaches to its memory
+  // for mods.
   //
   // The two are separate on purpose: games with anti-cheat (ASA on a
   // BattlEye server, for one) refuse memory access, but commands, the map and
-  // waypoints don't need it. So a failed memory attach still selects the game.
+  // waypoints don't need it. So a game can be selected without mods.
   attach({ pid, name, demo, packId }) {
     this.detach();
-    if (demo) { pid = 0; name = 'demo.exe'; }
-    // Picking a game from its pack: attach to it if it's running, otherwise
-    // select it offline (RCON, map, waypoints and notes still work).
-    let offline = false;
     if (packId) {
       const g = this.listGames().find((x) => x.id === packId);
       if (!g) throw new Error('That game pack is missing.');
-      if (g.running) { pid = g.pid; name = g.exe; } else { pid = null; name = g.exe; offline = true; }
+      if (g.demo) demo = true;
+      else { pid = g.running ? g.pid : null; name = g.exe; }
     }
+    if (demo) { pid = 0; name = 'demo.exe'; }
+    // Picked from the library while not running: selected "offline" so RCON,
+    // the map, waypoints and the Library still work.
+    const offline = !demo && !pid;
     this.game = { key: String(name).toLowerCase(), name, pid, demo: Boolean(demo), offline };
     this.modsError = null;
     // Re-read packs on every attach so a pack dropped into the folder while
@@ -74,10 +116,35 @@ class Controller extends EventEmitter {
     this.pack = findPack(loadPacks([this.packsDir, this.userPacksDir]), name);
 
     const notices = [];
+    if (offline) this.modsError = 'the game isn\u2019t running';
+    else this._connectMemory(notices);
+
+    this.overlay.onAttach();
+    this.emit('structure', this.snapshot());
+    this.emit('overlay');
+    return { snapshot: this.snapshot(), notices };
+  }
+
+  // Why mods are off for the selected game before even trying, or null.
+  modsBlocked() {
+    if (!this.game || this.game.demo) return null;
+    if (this.pack && !this.pack.memory) return 'online-only';
+    if (this.pack?.offlineOnly && !this.store.load(this.game.key).modsEnabled) return 'offline-off';
+    return null;
+  }
+
+  _connectMemory(notices) {
+    const { name, pid, demo } = this.game;
+    const blocked = this.modsBlocked();
+    if (blocked) {
+      // Never even open the process: an anti-cheat sees the attempt, not
+      // just a successful read.
+      this.modsError = blocked === 'online-only' ? 'this game is online-only' : 'mods are off for this game';
+      this._watchProcess(pid, name);
+      return;
+    }
     let memory = null;
-    if (offline) {
-      this.modsError = 'the game isn\u2019t running';
-    } else try {
+    try {
       if (demo) {
         memory = new DemoGame();
       } else {
@@ -89,14 +156,87 @@ class Controller extends EventEmitter {
       this.modsError = err.message;
       notices.push(`Mods aren't available for this game (${err.message}) Commands, the map and waypoints still work.`);
     }
-
     if (memory) this._startSession(memory, name, pid, notices);
-    else if (!offline) this._watchProcess(pid, name);
+    else this._watchProcess(pid, name);
+  }
 
-    this.overlay.onAttach();
+  // Turns mods on or off for an offline-only game. Turning them on while the
+  // game runs attaches right away; turning them off drops the memory session
+  // but keeps the game selected.
+  setModsEnabled(on) {
+    const g = this._requireGame();
+    this.store.update(g.key, (d) => { d.modsEnabled = Boolean(on); });
+    const notices = [];
+    if (!on && this.session) {
+      this._dropSession();
+      this.modsError = 'mods are off for this game';
+      this._watchProcess(g.pid, g.name);
+    } else if (on && !this.session && !g.offline) {
+      clearInterval(this._watch);
+      this.modsError = null;
+      this._connectMemory(notices);
+    }
     this.emit('structure', this.snapshot());
     this.emit('overlay');
     return { snapshot: this.snapshot(), notices };
+  }
+
+  // Waits for a just-launched game to start, then attaches to it.
+  waitForLaunch(packId, { timeoutMs = 180_000, everyMs = 2000 } = {}) {
+    clearInterval(this._launchWait);
+    const started = Date.now();
+    return new Promise((resolve) => {
+      this._launchWait = setInterval(() => {
+        const g = this.listGames().find((x) => x.id === packId);
+        if (g?.running) {
+          clearInterval(this._launchWait);
+          this._launchWait = null;
+          // A few extra seconds lets the game finish creating its window
+          // before Keystone looks for it.
+          setTimeout(() => {
+            try { resolve(this.attach({ packId })); } catch (err) { resolve({ error: err.message }); }
+          }, 4000);
+        } else if (Date.now() - started > timeoutMs) {
+          clearInterval(this._launchWait);
+          this._launchWait = null;
+          resolve({ error: 'The game didn\u2019t start within 3 minutes.' });
+        }
+      }, everyMs);
+    });
+  }
+
+  // Picks up a game started outside Keystone (from Steam, a desktop shortcut,
+  // a restart after a crash). Called every few seconds by main.
+  //
+  // Only steps in when nothing live is attached, and never switches away from
+  // a game the person has open: if they're on one game's page, only that game
+  // starting attaches. A game has to stay up for `graceMs` first, so the
+  // launcher stub some games run for a second isn't grabbed, and the game has
+  // its window by the time the overlay looks for it.
+  autoAttachTick({ graceMs = 4000, now = Date.now() } = {}) {
+    if (this._launchWait) return null; // Play is already waiting for it
+    if (this.game && !this.game.offline) return null;
+    const running = this.listGames().filter((g) => g.running && g.pid !== this._skipPid);
+    const pick = this.game
+      ? running.find((g) => g.exe.toLowerCase() === this.game.key)
+      : running[0];
+    if (!pick) { this._seen = null; return null; }
+    if (this._seen?.pid !== pick.pid) { this._seen = { pid: pick.pid, since: now }; return null; }
+    if (now - this._seen.since < graceMs) return null;
+    this._seen = null;
+    // A failure is reported once, not every tick: that process is skipped.
+    try { return { game: pick.name, ...this.attach({ packId: pick.id }) }; } catch (err) { this._skipPid = pick.pid; throw err; }
+  }
+
+  // How to start a game: the pack's own launch info, else the store it's
+  // installed from.
+  async launchTarget(packId) {
+    const p = this._packs().find((x) => x.id === packId);
+    if (p?.launch) return { kind: 'uri', uri: p.launch.uri };
+    const hit = p ? (await this.installed.match([p])).get(p.id) : null;
+    const t = launchFor(hit);
+    if (!t) throw new Error('Keystone doesn\u2019t know how to start this game. Start it yourself and it\u2019ll be picked up.');
+    return t;
   }
 
   _startSession(memory, name, pid, notices) {
@@ -135,15 +275,36 @@ class Controller extends EventEmitter {
     this._watch.unref?.();
   }
 
+  // The game closed: keep it selected (its page, map and Library stay open)
+  // but drop the memory session.
   _gameExited(name) {
-    this._teardown();
+    this._dropSession();
+    clearInterval(this._watch);
+    this._watch = null;
+    if (this.game) {
+      this.game.pid = null;
+      this.game.offline = true;
+      this.modsError = 'the game isn\u2019t running';
+    }
     this.emit('detached', { name });
     this.emit('structure', this.snapshot());
     this.emit('overlay');
   }
 
+  _dropSession() {
+    const s = this.session;
+    this.session = null;
+    if (s) {
+      s.removeAllListeners();
+      s.close();
+    }
+  }
+
   detach() {
     if (!this.game) return this.snapshot();
+    // Detaching from a running game by hand means "leave it alone": don't let
+    // auto-attach grab the same process again a few seconds later.
+    if (this.game.pid) this._skipPid = this.game.pid;
     this._teardown();
     this.emit('structure', this.snapshot());
     this.emit('overlay');
@@ -151,17 +312,12 @@ class Controller extends EventEmitter {
   }
 
   _teardown() {
-    const s = this.session;
-    this.session = null;
+    this._dropSession();
     this.game = null;
     this.pack = null;
     this.modsError = null;
     clearInterval(this._watch);
     this._watch = null;
-    if (s) {
-      s.removeAllListeners();
-      s.close();
-    }
   }
 
   loadTableFile(filePath) {
@@ -190,6 +346,85 @@ class Controller extends EventEmitter {
   setEnabled(id, enabled) { this._requireSession().setEnabled(id, enabled); return true; }
   setTarget(id, value) { this._requireSession().setTarget(id, value); return true; }
   applyValue(id, value) { this._requireSession().applyValue(id, value); return true; }
+
+  // ---------- hotkeys, pins, quick actions ----------
+
+  setHotkey(id, accel) {
+    const s = this._requireSession();
+    const rec = s.getRecord(id);
+    if (!rec || rec.kind !== 'value') throw new Error('Only mods with a value can have a hotkey.');
+    const clean = accel ? hotkeys.normalize(accel) : null;
+    const d = this.store.load(this.game.key);
+    if (clean) {
+      const taken = Object.entries(d.hotkeys || {}).find(([other, a]) => a === clean && other !== id);
+      if (taken) {
+        const otherRec = s.getRecord(taken[0]);
+        throw new Error(`${clean} is already used by "${this._label(otherRec) || 'another mod'}".`);
+      }
+    }
+    this.store.update(this.game.key, (data) => {
+      data.hotkeys = { ...(data.hotkeys || {}) };
+      if (clean) data.hotkeys[id] = clean; else delete data.hotkeys[id];
+    });
+    this.emit('structure', this.snapshot());
+    return clean;
+  }
+
+  setPinned(id, on) {
+    this._requireGame();
+    this.store.update(this.game.key, (d) => {
+      const set = new Set(d.pinned || []);
+      if (on) set.add(id); else set.delete(id);
+      d.pinned = [...set];
+    });
+    this.emit('structure', this.snapshot());
+    this.emit('overlay');
+    return Boolean(on);
+  }
+
+  // Hotkeys for the open game, only while mods are connected.
+  activeHotkeys() {
+    if (!this.session) return {};
+    const ids = new Set(this.session.records.map((r) => r.id));
+    return Object.fromEntries(Object.entries(this.store.load(this.game.key).hotkeys || {}).filter(([id]) => ids.has(id)));
+  }
+
+  _label(rec) {
+    if (!rec) return null;
+    const u = this.pack?.modsUi?.[rec.groupPath.concat(rec.name).join('/')];
+    return u?.label || rec.name;
+  }
+
+  // What a hotkey (or a tap in the overlay or on the phone) does to a mod,
+  // depending on its control:
+  //   apply   writes the pack's value once
+  //   steps   moves to the next value; past the last one, turns off
+  //   toggle  On at the pack's value / Off
+  //   other   On (keeps the current target, or the game's value) / Off
+  quickAction(id) {
+    const s = this._requireSession();
+    const rec = s.getRecord(id);
+    if (!rec || rec.kind !== 'value') throw new Error('That mod can\u2019t be switched.');
+    const st = s.state.get(id);
+    const ui = this.pack?.modsUi?.[rec.groupPath.concat(rec.name).join('/')] || {};
+    const label = ui.label || rec.name;
+    if (ui.control === 'apply') {
+      s.applyValue(id, ui.value);
+      return { label, state: 'Applied' };
+    }
+    if (ui.control === 'steps' && Array.isArray(ui.values) && ui.values.length) {
+      const i = st.enabled ? ui.values.findIndex((v) => Number(v) === Number(st.target)) : -1;
+      if (i === ui.values.length - 1) { s.setEnabled(id, false); return { label, state: 'Off' }; }
+      const next = ui.values[i + 1];
+      s.setTarget(id, next);
+      s.setEnabled(id, true);
+      return { label, state: ui.labels?.[i + 1] ?? String(next) };
+    }
+    if (st.enabled) { s.setEnabled(id, false); return { label, state: 'Off' }; }
+    if (ui.control === 'toggle' && ui.value !== undefined) s.setTarget(id, ui.value);
+    s.setEnabled(id, true);
+    return { label, state: 'On' };
+  }
 
   // ---------- profiles ----------
 
@@ -278,15 +513,39 @@ class Controller extends EventEmitter {
     const base = this.session
       ? this.session.snapshot()
       : { game: { name: this.game.name, pid: this.game.pid, key: this.game.key, tables: [], offline: this.game.offline }, records: [] };
+    // Pack presentation (friendly labels, sliders, steps), hotkeys and pins
+    // ride along on each record, so the desktop, overlay and phone agree.
+    const ui = this.pack?.modsUi || {};
+    const saved = this.store.load(this.game.key);
+    const keys = saved.hotkeys || {};
+    const pinned = new Set(saved.pinned || []);
+    base.records = base.records.map((r) => {
+      const u = ui[r.groupPath.concat(r.name).join('/')];
+      const extra = {};
+      if (u) { extra.label = u.label || r.name; extra.ui = u; }
+      if (keys[r.id]) extra.hotkey = keys[r.id];
+      if (pinned.has(r.id)) extra.pinned = true;
+      return Object.keys(extra).length ? { ...r, ...extra } : r;
+    });
     return {
       attached: true,
       ...base,
       mods: Boolean(this.session),
       modsError: this.modsError,
+      modsBlocked: this.modsBlocked(),
+      offlineOnly: Boolean(this.pack?.offlineOnly),
+      offlineNote: this.pack?.offlineNote || null,
       profiles: this.profileSummary(),
       pack: this.pack ? this.pack.name : null,
+      packId: this.pack ? this.pack.id : null,
+      canLaunch: Boolean(this.pack?.launch || (this.pack && launchFor(this._installedHits?.get(this.pack.id)))),
+      installed: (this.pack && this._installedHits?.get(this.pack.id)?.store) || null,
       displayName: this.game.demo ? 'Demo game' : (this.pack?.name || this.game.name.replace(/\.exe$/i, '')),
       hasCommands: Boolean(this.pack?.commands),
+      // For the phone's Teleport list.
+      teleport: this.overlay.teleportMethod()
+        ? { waypoints: this.overlay.waypoints().map((w) => ({ id: w.id, name: w.name })), tracked: this.store.load(this.game.key).overlay.tracked || null }
+        : null,
     };
   }
 
@@ -295,6 +554,7 @@ class Controller extends EventEmitter {
   }
 
   shutdown() {
+    clearInterval(this._launchWait);
     this._teardown();
     this.commands.shutdown();
   }

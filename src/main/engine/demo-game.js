@@ -36,6 +36,10 @@ class DemoGame {
     this.loadingEveryMs = loadingEveryMs;
     this.loadingForMs = loadingForMs;
     this.alive = true;
+    // Where the player has been moved to by someone else (Keystone's teleport
+    // or a locked position), relative to the scripted path.
+    this.moved = { x: 0, y: 0, z: 0 };
+    this.lastPos = null;
 
     this._writePtr(PLAYER_PTR, PLAYER);
     this._writePtr(PLAYER + BigInt(P.inv), INVENTORY);
@@ -73,14 +77,26 @@ class DemoGame {
       this._i(INVENTORY, I.wood, this._ri(INVENTORY, I.wood) + 1);
     }
 
-    // Wander a figure-eight across a ±3000 unit world.
-    const x = 3000 * Math.sin(s * 0.05);
-    const y = 1800 * Math.sin(s * 0.1);
+    // Wander a figure-eight across a ±3000 unit world. A position written
+    // from outside since the last step (a teleport) shifts the path, so the
+    // player carries on from the new spot like in a real game.
+    if (this.lastPos) {
+      for (const k of ['x', 'y', 'z']) {
+        const now = this._rf(PLAYER, P[k]);
+        if (Math.abs(now - this.lastPos[k]) > 0.01) this.moved[k] += now - this.lastPos[k];
+      }
+    }
+    const x = 3000 * Math.sin(s * 0.05) + this.moved.x;
+    const y = 1800 * Math.sin(s * 0.1) + this.moved.y;
+    const z = 120 + 30 * Math.sin(s * 0.3) + this.moved.z;
     const dx = 3000 * 0.05 * Math.cos(s * 0.05);
     const dy = 1800 * 0.1 * Math.cos(s * 0.1);
     this._f(PLAYER, P.x, x);
     this._f(PLAYER, P.y, y);
-    this._f(PLAYER, P.z, 120 + 30 * Math.sin(s * 0.3));
+    this._f(PLAYER, P.z, z);
+    // Read back rather than keep x/y/z: the stored floats are 32-bit, so
+    // comparing against the doubles would see a "move" every step.
+    this.lastPos = { x: this._rf(PLAYER, P.x), y: this._rf(PLAYER, P.y), z: this._rf(PLAYER, P.z) };
     this._f(PLAYER, P.yaw, (Math.atan2(dy, dx) * 180) / Math.PI);
   }
 

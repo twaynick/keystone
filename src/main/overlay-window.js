@@ -17,7 +17,14 @@ const HOTKEYS = {
   toggle: 'CommandOrControl+Shift+O',
   edit: 'CommandOrControl+Shift+E',
   waypoint: 'CommandOrControl+Shift+W',
+  // G for "go". Ctrl+Shift+T would have read better, but these are global
+  // shortcuts, and that one reopens closed tabs in every browser.
+  teleport: 'CommandOrControl+Shift+G',
 };
+
+// Registered only while the selected game has a Find me command (ARK), so
+// Ctrl+Shift+F stays free for other programs the rest of the time.
+const FIND_ME = 'CommandOrControl+Shift+F';
 
 class OverlayWindow extends EventEmitter {
   constructor({ controller, settings, root }) {
@@ -75,7 +82,7 @@ class OverlayWindow extends EventEmitter {
       visible: Boolean(this.win && this.win.isVisible()),
       userHidden: this.userHidden,
       editing: this.editing,
-      hotkeys: { toggle: 'Ctrl+Shift+O', edit: 'Ctrl+Shift+E', waypoint: 'Ctrl+Shift+W' },
+      hotkeys: { toggle: 'Ctrl+Shift+O', edit: 'Ctrl+Shift+E', waypoint: 'Ctrl+Shift+W', teleport: 'Ctrl+Shift+G', findMe: this._findMeOn ? 'Ctrl+Shift+F' : null },
       hotkeyErrors: this.hotkeyErrors,
     };
   }
@@ -103,6 +110,11 @@ class OverlayWindow extends EventEmitter {
     return this.status();
   }
 
+  // Short message in the middle-bottom of the screen (hotkey results etc.).
+  flash(text) {
+    this._send('overlay:flash', text);
+  }
+
   dropWaypoint() {
     try {
       const wp = this.c.overlay.addWaypoint({});
@@ -112,7 +124,55 @@ class OverlayWindow extends EventEmitter {
     }
   }
 
+  // Teleports to the tracked waypoint (Ctrl+Shift+G).
+  async teleportTracked() {
+    try {
+      const id = this.c.store.load(this.c.game?.key || '').overlay?.tracked;
+      if (!this.c.game) throw new Error('Choose a game first.');
+      if (!id) throw new Error('Track a waypoint first, then press Ctrl+Shift+G to go there.');
+      const r = await this.c.overlay.teleport({ waypointId: id });
+      this._send('overlay:flash', `Teleported to ${r.name}`);
+    } catch (err) {
+      this._send('overlay:flash', err.message);
+    }
+  }
+
+  // Teleports to a spot picked on the overlay map.
+  async teleportTo(pos) {
+    try {
+      await this.c.overlay.teleport(pos);
+      this._send('overlay:flash', 'Teleported');
+    } catch (err) {
+      this._send('overlay:flash', err.message);
+    }
+  }
+
+  async findMe() {
+    try {
+      this._send('overlay:flash', 'Finding you\u2026');
+      const h = await this.c.overlay.findMe();
+      const latlon = this.c.overlay.variant().units === 'latlon';
+      this._send('overlay:flash', latlon ? `You're at ${h.y.toFixed(1)}, ${h.x.toFixed(1)}` : `You're at ${Math.round(h.x)}, ${Math.round(h.y)}`);
+    } catch (err) {
+      this._send('overlay:flash', err.message);
+    }
+  }
+
+  _syncFindMe() {
+    const want = Boolean(this.win && this.c.game && this.c.pack?.findMe);
+    if (want === Boolean(this._findMeOn)) return;
+    if (want) {
+      this._findMeOn = globalShortcut.register(FIND_ME, () => this.findMe());
+      if (!this._findMeOn) this.hotkeyErrors.push('Ctrl+Shift+F is used by another program');
+    } else {
+      globalShortcut.unregister(FIND_ME);
+      this._findMeOn = false;
+    }
+    this.emit('status');
+  }
+
   pushState() {
+    this._syncFindMe();
     if (!this.win) return;
     this._send('overlay:state', this.c.overlay.state());
     this._updateVisibility();
@@ -181,6 +241,8 @@ class OverlayWindow extends EventEmitter {
     clearInterval(this._fgTimer);
     this._fgTimer = null;
     for (const accel of Object.values(HOTKEYS)) globalShortcut.unregister(accel);
+    if (this._findMeOn) globalShortcut.unregister(FIND_ME);
+    this._findMeOn = false;
     this.hotkeyErrors = [];
     this.editing = false;
     if (this.win) this.win.destroy();
@@ -193,6 +255,7 @@ class OverlayWindow extends EventEmitter {
       toggle: () => this.toggleVisible(),
       edit: () => this.setEditing(!this.editing),
       waypoint: () => this.dropWaypoint(),
+      teleport: () => this.teleportTracked(),
     };
     for (const [name, accel] of Object.entries(HOTKEYS)) {
       globalShortcut.unregister(accel);

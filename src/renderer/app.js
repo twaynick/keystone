@@ -1,6 +1,6 @@
 'use strict';
 
-/* global keystone, MapMath */
+/* global keystone, MapMath, KeystoneTheme */
 
 const $ = (id) => document.getElementById(id);
 
@@ -11,12 +11,18 @@ const state = {
   filter: '',
   procFilter: '',
   platform: 'win32',
-  view: 'mods',
+  view: 'home',
+  gameTab: 'mods',
+  modCat: null,
+  gameSearch: '',
+  homeFilter: 'all',
+  launching: false,
   remote: null,
   ovStatus: null,
   ovData: { attached: false },
   ovLive: { pos: null, readouts: {} },
   calib: null,
+  placing: false,   // next click on the map preview sets "I'm here"
   mapImg: null,
   mapUrl: null,
   games: [],
@@ -68,126 +74,234 @@ function fmt(v, type) {
   return String(v);
 }
 
-const TYPE_LABEL = { byte: 'byte', int16: '2-byte integer', int32: 'integer', int64: '8-byte integer', float: 'decimal', double: 'decimal' };
 
-// ---------- process picker ----------
+// ---------- games library (home) ----------
+const BOLT = '<path d="M13.2 2.5 5 13.2h5.6L9.8 21.5 19 10.3h-5.7z"/>';
+const PIN = '<path d="M9 3h6l-1 6 3.5 3.5V15H13v6l-1 1-1-1v-6H6.5v-2.5L10 9z"/>';
+
+function svgIcon(paths, cls) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  if (cls) svg.setAttribute('class', cls);
+  // Static markup from this file only, never from data.
+  svg.innerHTML = paths;
+  return svg;
+}
+
 async function refreshProcesses() {
   const [list, games] = await Promise.all([call(keystone.listProcesses()), call(keystone.listGames())]);
   if (list) state.processes = list;
   if (games) state.games = games;
-  renderProcesses();
+  renderHome();
 }
 
-function renderProcesses() {
-  const ul = $('procList');
-  ul.replaceChildren();
-  const attachedName = state.snapshot.attached ? state.snapshot.game.name.toLowerCase() : null;
+// Cover art loads through ksart://; when a game has none (or the PC is
+// offline the first time), the tile shows its name instead.
+function artImg(packId, kind, onFail) {
+  const img = el('img', { alt: '', loading: 'lazy', src: `ksart://${kind}/${encodeURIComponent(packId)}` });
+  img.addEventListener('error', () => { img.remove(); onFail?.(); });
+  return img;
+}
 
-  const demo = el('li', { class: `proc-item demo${attachedName === 'demo.exe' ? ' active' : ''}`, role: 'option', tabindex: '0' },
-    el('span', { class: 'name', text: 'Demo game' }),
-    el('span', { class: 'tag', text: 'built in' }));
-  demo.addEventListener('click', () => attach({ demo: true }));
-  demo.addEventListener('keydown', (e) => { if (e.key === 'Enter') attach({ demo: true }); });
-  ul.append(demo);
+const STORES = { steam: 'Steam', epic: 'Epic', gog: 'GOG', xbox: 'Xbox' };
 
-  const q = state.procFilter.trim().toLowerCase();
-  // Games with a pack: pick them even when they aren't running (RCON, map,
-  // waypoints still work), or attach when they are.
-  const games = state.games.filter((g) => !q || g.name.toLowerCase().includes(q));
-  if (games.length) {
-    ul.append(el('li', { class: 'pop-section', role: 'presentation', text: 'Your games' }));
-    for (const g of games) {
-      const active = attachedName === g.exe.toLowerCase();
-      const li = el('li', { class: `proc-item${active ? ' active' : ''}`, role: 'option', tabindex: '0' },
-        el('span', { class: 'name', text: g.name }),
-        el('span', { class: `tag${g.running ? ' running' : ''}`, text: g.running ? 'running' : 'not running' }));
-      const go = () => attach({ packId: g.id });
-      li.addEventListener('click', go);
-      li.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-      ul.append(li);
-    }
+function renderHome() {
+  const q = (state.gameSearch || '').trim().toLowerCase();
+  const grid = $('gameGrid');
+  const f = state.homeFilter;
+  const games = state.games.filter((g) => (!q || g.name.toLowerCase().includes(q))
+    && (f === 'all' || (f === 'installed' && g.installed) || (f === 'running' && g.running)));
+  for (const b of $('homeFilter').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.filter === f));
+  grid.replaceChildren(...games.map((g) => {
+    const art = el('div', { class: 'tile-art' });
+    const initials = el('span', { class: 'initials', text: g.name });
+    initials.hidden = true;
+    art.append(initials, artImg(g.id, 'cover', () => { initials.hidden = false; }));
+    const flags = el('div', { class: 'tile-flags' });
+    if (g.running) flags.append(el('span', { class: 'badge ok', text: 'Running' }));
+    if (g.offlineOnly) flags.append(el('span', { class: 'badge warn', text: 'Offline only' }));
+    if (g.noMods) flags.append(el('span', { class: 'badge', text: 'No mods' }));
+    art.append(flags);
+    const sub = g.demo ? 'Built in'
+      : g.installed ? `Installed · ${STORES[g.installed.store] || g.installed.store}`
+        : [g.noMods ? null : 'Mods', g.hasCommands ? 'Commands' : null, 'Library'].filter(Boolean).join(' · ');
+    const tile = el('button', { class: 'game-tile', title: g.name }, art, el('span', { class: 'tile-name', text: g.name }), el('span', { class: 'tile-sub', text: sub }));
+    tile.addEventListener('click', () => openGame({ packId: g.id }));
+    return tile;
+  }));
+  if (!games.length) {
+    const why = q ? `No games match "${state.gameSearch}".`
+      : f === 'installed' ? (state.platform === 'win32' ? 'None of your Keystone games were found in Steam, Epic, GOG or the Xbox app.' : 'Finding installed games needs Windows.')
+        : 'None of your Keystone games are running.';
+    grid.replaceChildren(el('p', { class: 'pop-note', text: why }));
   }
+
+  const ul = $('procList');
+  const pq = state.procFilter.trim().toLowerCase();
   const packExes = new Set(state.games.map((g) => g.exe.toLowerCase()));
-  const shown = state.processes.filter((p) => !packExes.has(p.name.toLowerCase()) && (!q || p.name.toLowerCase().includes(q)));
-  if (shown.length) ul.append(el('li', { class: 'pop-section', role: 'presentation', text: 'Running programs' }));
-  for (const p of shown) {
-    const li = el('li', { class: `proc-item${attachedName === p.name.toLowerCase() ? ' active' : ''}`, role: 'option', tabindex: '0', title: `${p.name} (PID ${p.pid})` },
+  const attachedName = state.snapshot.attached ? state.snapshot.game.name.toLowerCase() : null;
+  const shown = state.processes.filter((p) => !packExes.has(p.name.toLowerCase()) && (!pq || p.name.toLowerCase().includes(pq)));
+  ul.replaceChildren(...shown.map((p) => {
+    const li = el('li', { class: `proc-item${attachedName === p.name.toLowerCase() ? ' active' : ''}`, tabindex: '0', title: `${p.name} (PID ${p.pid})` },
       el('span', { class: 'name', text: p.name.replace(/\.exe$/i, '') }),
       el('span', { class: 'tag', text: String(p.pid) }));
-    li.addEventListener('click', () => attach({ pid: p.pid, name: p.name }));
-    li.addEventListener('keydown', (e) => { if (e.key === 'Enter') attach({ pid: p.pid, name: p.name }); });
-    ul.append(li);
-  }
-
+    const go = () => openGame({ pid: p.pid, name: p.name });
+    li.addEventListener('click', go);
+    li.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    return li;
+  }));
   const note = $('procNote');
-  if (state.platform !== 'win32') note.textContent = 'Attaching to real games needs Windows. The demo game works everywhere.';
-  else if (q && !shown.length) note.textContent = `Nothing running matches "${state.procFilter}".`;
+  if (state.platform !== 'win32') note.textContent = 'Attaching to running programs needs Windows. The demo game works everywhere.';
+  else if (!shown.length) note.textContent = pq ? `Nothing running matches "${state.procFilter}".` : 'Nothing else running.';
   else note.textContent = '';
 }
 
-function setSwitcher(open) {
-  $('switcherPop').hidden = !open;
-  $('switcherBtn').setAttribute('aria-expanded', String(open));
-  if (open) {
-    refreshProcesses();
-    $('procSearch').focus();
-  }
-}
-
-async function attach(target) {
-  setSwitcher(false);
-  const res = await call(keystone.attach(target));
-  if (res) {
+// Opens a game's page. Picking the game you're already on just shows it.
+async function openGame(target) {
+  const cur = state.snapshot;
+  const same = cur.attached && ((target.packId && cur.packId === target.packId) || (target.pid && cur.game.pid === target.pid));
+  if (!same) {
+    const res = await call(keystone.attach(target));
+    if (!res) return;
     state.snapshot = res.snapshot;
-    render();
     for (const n of res.notices) toast(n);
+    state.gameTab = defaultTab(res.snapshot);
   }
+  go('game');
 }
 
-// ---------- mods ----------
+function defaultTab(snap) {
+  if (snap.modsBlocked === 'online-only') return snap.hasCommands ? 'commands' : 'library';
+  return 'mods';
+}
+
+function go(view) {
+  state.view = view;
+  render();
+  if (view === 'home') refreshProcesses();
+  if (view === 'phone') loadRemote();
+  if (view === 'settings') loadAppSettings();
+  if (view === 'game') loadTab();
+}
+
+function setTab(tab) {
+  state.gameTab = tab;
+  if (tab !== 'overlay' && state.calib) setCalib(null);
+  if (tab !== 'overlay' && state.placing) setPlacing(false);
+  render();
+  loadTab();
+}
+
+function loadTab() {
+  if (isPane('overlay')) loadOverlay();
+  if (isPane('commands')) loadCommands();
+  if (isPane('library')) loadLibrary();
+}
+
+const isPane = (tab) => state.view === 'game' && state.gameTab === tab;
+
+// ---------- render ----------
 function render() {
   const snap = state.snapshot;
   const attached = snap.attached;
+  if (state.view === 'game' && !attached) state.view = 'home';
 
-  $('detachBtn').hidden = !attached;
-  $('liveDot').classList.toggle('on', attached && !snap.game.offline);
-  $('liveDot').classList.toggle('idle', attached && Boolean(snap.game.offline));
-  if (attached) {
-    $('attachedName').textContent = snap.displayName || snap.game.name;
-    const meta = [
-      snap.game.offline ? 'Not running' : snap.game.pid ? `PID ${snap.game.pid}` : 'Built in',
-      snap.mods ? null : 'no mods',
-      ...snap.game.tables,
-    ].filter(Boolean);
-    $('attachedMeta').textContent = meta.join(', ');
-  } else {
-    $('attachedName').textContent = 'Choose a game';
-    $('attachedMeta').textContent = 'Nothing attached';
-  }
-
-  const hasMods = attached && snap.records.length > 0;
-  const onMods = state.view === 'mods';
-  $('emptyDetached').hidden = !onMods || attached;
-  $('emptyNoTable').hidden = !onMods || !attached || hasMods || !snap.mods;
-  $('emptyNoMods').hidden = !onMods || !attached || snap.mods;
-  if (attached && !snap.mods) {
-    $('noModsText').textContent = snap.game.offline
-      ? 'The game isn\u2019t running. Start it and pick it again to use mods.'
-      : `Keystone can't reach this game's memory (${snap.modsError || 'access denied'}). That's normal for games with anti-cheat.`;
-    $('noModsCommands').hidden = !snap.hasCommands;
-  }
-  $('loadTableBtn').hidden = !attached || !snap.mods;
-  $('modsView').hidden = !onMods || !hasMods;
-  $('phoneView').hidden = state.view !== 'phone';
-  $('overlayView').hidden = state.view !== 'overlay';
-  $('commandsView').hidden = state.view !== 'commands';
-  $('settingsView').hidden = state.view !== 'settings';
-  $('libraryView').hidden = state.view !== 'library';
-  for (const t of document.querySelectorAll('.tab')) {
+  for (const t of document.querySelectorAll('.nav .tab')) {
     if (t.dataset.view === state.view) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   }
+  $('homeView').hidden = state.view !== 'home';
+  $('gameView').hidden = state.view !== 'game';
+  $('phoneView').hidden = state.view !== 'phone';
+  $('settingsView').hidden = state.view !== 'settings';
 
-  renderProcesses();
+  // Sidebar entry for the open game.
+  $('navGame').hidden = !attached;
+  if (attached) {
+    const name = snap.displayName || snap.game.name;
+    $('navGameName').textContent = name;
+    $('navDot').classList.toggle('on', !snap.game.offline);
+    const key = snap.packId || '';
+    if ($('navThumb').dataset.key !== key) {
+      $('navThumb').dataset.key = key;
+      $('navThumb').hidden = !key;
+      if (key) $('navThumb').src = `ksart://cover/${encodeURIComponent(key)}`;
+    }
+    renderHero(snap);
+  }
+
+  for (const b of document.querySelectorAll('#gameTabs button')) {
+    b.setAttribute('aria-pressed', String(b.dataset.tab === state.gameTab));
+    // Mods tab disappears for games Keystone never mods.
+    if (b.dataset.tab === 'mods') b.hidden = attached && snap.modsBlocked === 'online-only';
+  }
+  $('modsPane').hidden = !isPane('mods');
+  $('commandsView').hidden = !isPane('commands');
+  $('libraryView').hidden = !isPane('library');
+  $('overlayView').hidden = !isPane('overlay');
+
+  if (attached && isPane('mods')) renderModsPane(snap);
+  if (state.view === 'home') renderHome();
+}
+
+function renderHero(snap) {
+  const key = snap.packId || `exe:${snap.game.name}`;
+  if ($('hero').dataset.key !== key) {
+    $('hero').dataset.key = key;
+    const bg = $('heroImg');
+    bg.hidden = !snap.packId;
+    if (snap.packId) {
+      bg.src = `ksart://hero/${encodeURIComponent(snap.packId)}`;
+      // No hero art: fall back to the cover, blurred by the banner styling.
+      bg.onerror = () => { bg.onerror = () => { bg.hidden = true; }; bg.src = `ksart://cover/${encodeURIComponent(snap.packId)}`; };
+    }
+    const cov = $('heroCover');
+    cov.hidden = !snap.packId;
+    if (snap.packId) { cov.src = `ksart://cover/${encodeURIComponent(snap.packId)}`; cov.onerror = () => { cov.hidden = true; }; }
+  }
+  $('gameTitle').textContent = snap.displayName || snap.game.name;
+
+  const running = !snap.game.offline;
+  const status = $('gameStatus');
+  const bits = [];
+  bits.push(el('span', { class: `badge ${running ? 'ok' : ''}`, text: running ? (snap.game.demo ? 'Running (demo)' : 'Running') : 'Not running' }));
+  if (snap.offlineOnly) bits.push(el('span', { class: 'badge warn', text: 'Offline only' }));
+  if (snap.modsBlocked === 'online-only') bits.push(el('span', { class: 'badge', text: 'Online game: no mods' }));
+  if (snap.mods) bits.push(el('span', { class: 'badge accent', text: 'Mods connected' }));
+  if (snap.game.tables?.length) bits.push(el('span', { text: snap.game.tables.join(', ') }));
+  status.replaceChildren(...bits);
+
+  const play = $('playBtn');
+  play.classList.toggle('running', running);
+  play.disabled = running || state.launching || (!snap.canLaunch);
+  play.hidden = !running && !snap.canLaunch;
+  $('playLabel').textContent = running ? 'Playing' : state.launching ? 'Starting…' : 'Play';
+  play.title = running ? '' : `Start the game${snap.installed ? ` through ${STORES[snap.installed] || snap.installed}` : ''}; Keystone connects when it’s running`;
+}
+
+function renderModsPane(snap) {
+  const hasMods = snap.mods && snap.records.length > 0;
+  const banner = $('offlineBanner');
+  banner.hidden = !snap.offlineOnly;
+  if (snap.offlineOnly) {
+    $('offlineText').textContent = snap.offlineNote || 'Mods only work in offline or solo play. Turn them off before you go online.';
+    const on = snap.modsBlocked !== 'offline-off';
+    for (const b of $('modsSwitch').querySelectorAll('button')) b.setAttribute('aria-pressed', String((b.dataset.v === 'on') === on));
+  }
+  $('emptyNoTable').hidden = !snap.mods || hasMods;
+  $('emptyNoMods').hidden = snap.mods;
+  if (!snap.mods) {
+    const offline = snap.game.offline;
+    $('noModsTitle').textContent = snap.modsBlocked === 'offline-off' ? 'Mods are off for this game'
+      : offline ? 'Start the game to use mods' : 'Mods aren’t available right now';
+    $('noModsText').textContent = snap.modsBlocked === 'offline-off'
+      ? 'Turn on "Use mods in this game" above when you’re playing offline or solo.'
+      : offline ? (snap.canLaunch ? 'Press Play and Keystone connects to the game as soon as it starts.' : 'Start the game and Keystone picks it up.')
+        : `Keystone can't reach this game's memory (${snap.modsError || 'access denied'}). That's normal for games with anti-cheat.`;
+    $('noModsCommands').hidden = !snap.hasCommands;
+  }
+  $('modsView').hidden = !hasMods;
   if (hasMods) { renderMods(); renderProfiles(); }
 }
 
@@ -196,12 +310,12 @@ function renderProfiles() {
   const p = state.snapshot.profiles || { names: [], active: null, autoApply: true, dirty: false };
   const sel = $('profileSelect');
   sel.replaceChildren(
-    el('option', { value: '', text: p.names.length ? 'No profile' : 'No saved profiles' }),
+    el('option', { value: '', text: p.names.length ? 'None' : 'None saved yet' }),
     ...p.names.map((n) => el('option', { value: n, text: n })),
   );
   sel.value = p.active || '';
   $('profileDirty').hidden = !p.dirty;
-  $('profileSave').textContent = p.active ? 'Save' : 'Save profile';
+  $('profileSave').textContent = p.active ? 'Save' : 'Save these mods';
   $('profileSaveAs').hidden = !p.active;
   $('profileRename').disabled = !p.active;
   $('profileDelete').disabled = !p.active;
@@ -296,95 +410,254 @@ function wireProfiles() {
   $('autoApply').addEventListener('change', (e) => call(keystone.setAutoApply(e.target.checked)));
 }
 
+// ---------- mods ----------
+// Top-level table groups become the category tabs (like Wand's ALL / PLAYER /
+// INVENTORY), and each group renders as one glass panel.
+function topGroup(r) {
+  return r.groupPath[0] || (r.kind === 'group' ? r.name : 'Other');
+}
+
+function modLabel(r) {
+  return r.label || r.name;
+}
+
 function visibleRecords() {
   const q = state.filter.trim().toLowerCase();
+  const cat = state.modCat;
   return state.snapshot.records.filter((r) => {
-    if (r.groupPath.some((g, i) => state.collapsed.has(r.groupPath.slice(0, i + 1).join('/')))) return false;
+    if (r.kind === 'group') return false;
+    if (cat === '__pinned') { if (!r.pinned) return false; } else if (cat && topGroup(r) !== cat) return false;
     if (!q) return true;
-    if (r.kind === 'group') return true;
-    return r.name.toLowerCase().includes(q) || r.groupPath.join(' ').toLowerCase().includes(q);
+    return modLabel(r).toLowerCase().includes(q) || r.groupPath.join(' ').toLowerCase().includes(q);
   });
 }
 
+function renderCats() {
+  const recs = state.snapshot.records;
+  const cats = [...new Set(recs.filter((r) => r.kind !== 'group').map(topGroup))];
+  const anyPinned = recs.some((r) => r.pinned);
+  if (state.modCat === '__pinned' ? !anyPinned : (state.modCat && !cats.includes(state.modCat))) state.modCat = null;
+  const key = cats.join('|') + '#' + state.modCat + '#' + anyPinned;
+  if ($('modCats').dataset.key === key) return;
+  $('modCats').dataset.key = key;
+  const btn = (label, value, icon) => {
+    const b = el('button', { 'aria-pressed': String(state.modCat === value) });
+    if (icon) b.append(svgIcon(icon));
+    b.append(document.createTextNode(label));
+    b.addEventListener('click', () => { state.modCat = value; renderMods(); });
+    return b;
+  };
+  $('modCats').replaceChildren(
+    btn('All', null, '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>'),
+    ...(anyPinned ? [btn('Pinned', '__pinned', PIN)] : []),
+    ...(cats.length > 1 ? cats.map((c) => btn(c, c)) : []),
+  );
+}
+
 function renderMods() {
+  renderCats();
   const recs = state.snapshot.records;
   const list = visibleRecords();
-  const key = list.map((r) => r.id).join('|');
+  const key = list.map((r) => `${r.id}:${r.hotkey || ''}:${r.pinned ? 1 : 0}`).join('|') + '#' + [...state.collapsed].join('|');
 
-  // Same rows as last time: patch in place (keeps focus and scroll).
+  // Same rows as last time: patch in place (keeps focus, slider drags and scroll).
   if (key === renderedKey) {
     for (const r of list) patchRow(r);
   } else {
     renderedKey = key;
     rowEls.clear();
-    const container = $('modsList');
-    container.replaceChildren(...list.map(buildRow));
+    const groups = new Map();
+    for (const r of list) {
+      const g = r.groupPath.join(' / ') || 'Mods';
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(r);
+    }
+    $('modsList').replaceChildren(...[...groups].map(([name, rows]) => {
+      const open = !state.collapsed.has(name);
+      const title = el('button', { class: 'group-title', 'aria-expanded': String(open) },
+        el('span', { class: 'chev', text: '▾' }), el('span', { text: name }), el('span', { class: 'count', text: String(rows.length) }));
+      title.addEventListener('click', () => {
+        if (state.collapsed.has(name)) state.collapsed.delete(name); else state.collapsed.add(name);
+        renderMods();
+      });
+      return el('section', { class: 'mod-group' }, title, ...(open ? rows.map(buildRow) : []));
+    }));
+    if (!list.length) $('modsList').replaceChildren(el('p', { class: 'pop-note', text: 'No mods match your search.' }));
   }
 
   const usable = recs.filter((r) => r.kind === 'value').length;
   const locked = recs.filter((r) => r.enabled).length;
-  $('modsCount').textContent = `${usable} mods${locked ? `, ${locked} locked` : ''}`;
+  $('modsCount').textContent = `${usable} mods${locked ? `, ${locked} on` : ''}`;
 }
 
+// Every value mod gets a control picked by the pack (modsUi) or the default:
+//   toggle  Off/On; On keeps the value at the pack's number
+//   slider  drag to a value; On keeps it there
+//   steps   pick one of a few values; picking one turns it on
+//   apply   one button that writes the pack's value once
+//   default value box, Apply (write once) and Off/On (keep it there)
 function buildRow(r) {
-  if (r.kind === 'group') {
-    const path = r.groupPath.concat(r.name).join('/');
-    const childCount = state.snapshot.records.filter((x) => x.kind === 'value' && x.groupPath.join('/').startsWith(path)).length;
-    const btn = el('button', { class: 'group-row', 'aria-expanded': String(!state.collapsed.has(path)), style: { paddingLeft: `${2 + r.depth * 16}px` } },
-      el('span', { class: 'chev', text: '▾' }),
-      el('span', { text: r.name }),
-      el('span', { class: 'count', text: `${childCount}` }));
-    btn.addEventListener('click', () => {
-      if (state.collapsed.has(path)) state.collapsed.delete(path); else state.collapsed.add(path);
-      renderMods();
-    });
-    return btn;
-  }
-
-  // Cards already pad 16px; nest further only below the first group level.
-  const indent = { paddingLeft: `${16 + Math.max(0, r.depth - 1) * 16}px` };
-
+  const nameEl = el('div', { class: 'mod-name' }, el('span', { class: 'label', text: modLabel(r), title: r.label ? r.name : '' }));
   if (r.kind !== 'value') {
-    return el('div', { class: 'mod-row inert', style: indent },
-      el('div', { class: 'mod-name' },
-        el('span', { class: 'label', text: r.name }),
-        el('span', { class: 'sub', text: r.kind === 'script' ? 'Script' : 'Not supported' })),
-      el('span', { class: 'reason', text: r.reason || '' }));
+    return el('div', { class: 'mod inert' }, svgIcon(BOLT, 'bolt'), nameEl,
+      el('span', { class: 'reason', text: r.kind === 'script' ? 'Script: needs Cheat Engine' : (r.reason || 'Not supported') }));
+  }
+  const now = el('span', { class: 'now' });
+  nameEl.append(now);
+  const controls = el('div', { class: 'mod-controls' });
+  const row = el('div', { class: 'mod' }, svgIcon(BOLT, 'bolt'), nameEl, controls);
+  const ui = r.ui || {};
+  const els = { row, now, ui, kind: ui.control || 'default' };
+
+  const seg = () => {
+    const s = el('span', { class: 'seg', role: 'group', 'aria-label': `${modLabel(r)} on or off` },
+      el('button', { 'data-v': 'off', text: 'Off' }), el('button', { 'data-v': 'on', text: 'On' }));
+    s.addEventListener('click', async (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const on = b.dataset.v === 'on';
+      if (on === Boolean(els.enabled)) return;
+      await turn(r, els, on);
+    });
+    els.seg = s;
+    return s;
+  };
+
+  if (els.kind === 'toggle') {
+    controls.append(seg());
+  } else if (els.kind === 'apply') {
+    const b = el('button', { class: 'btn primary apply', text: 'Apply' });
+    b.addEventListener('click', () => applyNow(r, ui.value));
+    controls.append(b);
+  } else if (els.kind === 'steps') {
+    const box = el('span', { class: 'steps', role: 'group', 'aria-label': modLabel(r) });
+    (ui.values || []).forEach((v, i) => {
+      const b = el('button', { text: ui.labels?.[i] ?? String(v), 'data-value': String(v) });
+      b.addEventListener('click', async () => {
+        if (els.enabled && Number(els.target) === Number(v)) { await call(keystone.setEnabled(r.id, false)); return; }
+        if (await call(keystone.setTarget(r.id, v)) !== undefined) await call(keystone.setEnabled(r.id, true));
+      });
+      box.append(b);
+    });
+    els.steps = box;
+    controls.append(box);
+  } else if (els.kind === 'slider') {
+    const min = Number(ui.min ?? 0);
+    const max = Number(ui.max ?? 100);
+    const valBox = el('input', { class: 'value-box', inputmode: 'decimal', 'aria-label': `${modLabel(r)} value` });
+    const slider = el('input', { class: 'slider', type: 'range', min: String(min), max: String(max), step: String(ui.step ?? 1), 'aria-label': modLabel(r) });
+    const paint = () => slider.style.setProperty('--fill', `${((Number(slider.value) - min) / (max - min || 1)) * 100}%`);
+    let t;
+    slider.addEventListener('input', () => {
+      valBox.value = slider.value;
+      paint();
+      // Debounced: a drag fires dozens of input events.
+      clearTimeout(t);
+      t = setTimeout(() => call(keystone.setTarget(r.id, slider.value)), 120);
+    });
+    valBox.addEventListener('change', async () => {
+      if (valBox.value.trim() === '') return;
+      await call(keystone.setTarget(r.id, valBox.value.trim()));
+    });
+    els.slider = slider; els.valBox = valBox; els.paint = paint;
+    controls.append(valBox, el('span', { class: 'slider-wrap' }, slider), seg());
+  } else {
+    const valBox = el('input', { class: 'value-box', inputmode: 'decimal', placeholder: 'value', 'aria-label': `${modLabel(r)} value` });
+    const apply = el('button', { class: 'btn apply', text: 'Apply', title: 'Write this value once' });
+    valBox.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commitTarget(r.id, valBox.value); valBox.blur(); }
+      if (e.key === 'Escape') { valBox.value = els.target === null ? '' : fmt(els.target, r.valueType); valBox.blur(); }
+    });
+    valBox.addEventListener('change', () => commitTarget(r.id, valBox.value));
+    apply.addEventListener('click', async () => {
+      if (valBox.value.trim() === '') { toast('Type a value first, then press Apply.'); valBox.focus(); return; }
+      await applyNow(r, valBox.value.trim());
+    });
+    els.valBox = valBox;
+    controls.append(valBox, apply, seg());
   }
 
-  const current = el('span', { class: 'mod-current' });
-  const input = el('input', { class: 'field mod-target', inputmode: 'decimal', placeholder: 'value', 'aria-label': `${r.name} value` });
-  const setBtn = el('button', { class: 'btn small', text: 'Set', title: 'Write this value once' });
-  const toggle = el('input', { type: 'checkbox', role: 'switch', 'aria-label': `Lock ${r.name}` });
-  const sw = el('label', { class: 'switch', title: 'Keep this value locked' }, toggle, el('span', { class: 'track' }));
-  const row = el('div', { class: 'mod-row', style: indent },
-    el('div', { class: 'mod-name' },
-      el('span', { class: 'label', text: r.name }),
-      el('span', { class: 'sub', text: TYPE_LABEL[r.valueType] || r.valueType })),
-    current, input, setBtn, sw);
+  // Pin and hotkey sit before the control, like Wand's row layout.
+  const pin = el('button', { class: `pin-btn${r.pinned ? ' on' : ''}`, title: r.pinned ? 'Unpin' : 'Pin: show it first and in the overlay', 'aria-label': `${r.pinned ? 'Unpin' : 'Pin'} ${modLabel(r)}`, 'aria-pressed': String(Boolean(r.pinned)) });
+  pin.append(svgIcon(PIN));
+  pin.addEventListener('click', () => call(keystone.setPinned(r.id, !r.pinned)));
+  const key = el('button', { class: `keycap${r.hotkey ? '' : ' unset'}`, title: r.hotkey ? `Hotkey: ${r.hotkey}. Click to change.` : 'Set a hotkey' });
+  if (r.hotkey) key.append(...keyParts(r.hotkey));
+  else key.textContent = '+ Key';
+  key.addEventListener('click', () => captureHotkey(r));
+  controls.prepend(pin, key);
 
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); commitTarget(r.id, input.value); input.blur(); }
-    if (e.key === 'Escape') { input.value = fmt(row._target, r.valueType).replace('—', ''); input.blur(); }
-  });
-  input.addEventListener('change', () => commitTarget(r.id, input.value));
-  setBtn.addEventListener('click', async () => {
-    if (input.value.trim() === '') { toast('Type a value first, then press Set.'); input.focus(); return; }
-    await call(keystone.applyValue(r.id, input.value.trim()));
-  });
-  toggle.addEventListener('change', async () => {
-    // Typed-but-uncommitted value counts: lock what the box shows.
-    if (input.value.trim() !== '' && Number(input.value) !== row._target) {
-      const ok = await call(keystone.setTarget(r.id, input.value.trim()));
-      if (ok === undefined) { toggle.checked = !toggle.checked; return; }
-    }
-    const ok = await call(keystone.setEnabled(r.id, toggle.checked));
-    if (ok === undefined) toggle.checked = !toggle.checked;
-  });
-
-  rowEls.set(r.id, { row, current, input, toggle });
+  rowEls.set(r.id, els);
   patchRow(r);
   return row;
+}
+
+const KEY_NAMES = { numadd: 'Num +', numsub: 'Num −', nummult: 'Num *', numdiv: 'Num /', numdec: 'Num .' };
+function keyLabel(k) {
+  if (KEY_NAMES[k]) return KEY_NAMES[k];
+  if (/^num\d$/.test(k)) return `Num ${k.slice(3)}`;
+  return k;
+}
+function keyParts(accel) {
+  return accel.split('+').map((k) => el('kbd', { text: keyLabel(k) }));
+}
+
+const CODE_KEYS = {
+  Backquote: '`', Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Semicolon: ';', Quote: "'",
+  Comma: ',', Period: '.', Slash: '/', Backslash: '\\', Space: 'Space', Tab: 'Tab', Backspace: 'Backspace',
+  ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+  Insert: 'Insert', Delete: 'Delete', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
+  NumpadAdd: 'numadd', NumpadSubtract: 'numsub', NumpadMultiply: 'nummult', NumpadDivide: 'numdiv', NumpadDecimal: 'numdec',
+};
+// Physical key (e.code) rather than the typed character, so Shift+1 is still
+// "1" and keyboard layouts don't change what's saved.
+function codeToKey(code) {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (/^Numpad\d$/.test(code)) return `num${code.slice(6)}`;
+  if (/^F\d{1,2}$/.test(code)) return code;
+  return CODE_KEYS[code] || null;
+}
+
+function captureHotkey(r) {
+  const dlg = $('keyDialog');
+  $('keyTitle').textContent = `Hotkey for ${modLabel(r)}`;
+  $('keyPreview').replaceChildren(document.createTextNode(r.hotkey ? 'Press new keys…' : 'Waiting for keys…'));
+  $('keyError').hidden = true;
+  $('keyRemove').hidden = !r.hotkey;
+  dlg.returnValue = '';
+  const onKey = async (e) => {
+    if (e.key === 'Escape') return; // the dialog closes itself
+    e.preventDefault();
+    const key = codeToKey(e.code);
+    if (!key) return; // a modifier on its own: keep waiting
+    const accel = [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', key].filter(Boolean).join('+');
+    $('keyPreview').replaceChildren(...keyParts(accel));
+    const res = await keystone.setHotkey(r.id, accel);
+    if (res.ok) { dlg.close('ok'); toast(`${modLabel(r)}: ${res.data}`); } else { $('keyError').textContent = res.error; $('keyError').hidden = false; }
+  };
+  dlg.addEventListener('keydown', onKey);
+  dlg.addEventListener('close', async () => {
+    dlg.removeEventListener('keydown', onKey);
+    if (dlg.returnValue === 'remove') await call(keystone.setHotkey(r.id, null));
+  }, { once: true });
+  dlg.showModal();
+}
+
+// On: keep the value. A typed (uncommitted) number or the pack's toggle value
+// is what gets kept; with neither, the game's current value is.
+async function turn(r, els, on) {
+  if (on) {
+    let target = null;
+    if (els.kind === 'toggle' && els.ui.value !== undefined) target = els.ui.value;
+    else if (els.valBox && els.valBox.value.trim() !== '' && Number(els.valBox.value) !== els.target) target = els.valBox.value.trim();
+    if (target !== null && (await call(keystone.setTarget(r.id, target))) === undefined) return;
+  }
+  await call(keystone.setEnabled(r.id, on));
+}
+
+async function applyNow(r, value) {
+  if (await call(keystone.applyValue(r.id, value)) !== undefined) toast(`${modLabel(r)}: set to ${value}.`);
 }
 
 async function commitTarget(id, raw) {
@@ -395,11 +668,18 @@ async function commitTarget(id, raw) {
 function patchRow(r) {
   const els = rowEls.get(r.id);
   if (!els) return;
-  els.row._target = r.target;
-  els.row.classList.toggle('locked', r.enabled);
-  els.toggle.checked = r.enabled;
-  if (document.activeElement !== els.input) {
-    els.input.value = r.target === null ? '' : fmt(r.target, r.valueType);
+  els.target = r.target;
+  els.enabled = r.enabled;
+  els.row.classList.toggle('on', r.enabled);
+  if (els.seg) for (const b of els.seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String((b.dataset.v === 'on') === r.enabled));
+  if (els.steps) for (const b of els.steps.querySelectorAll('button')) b.setAttribute('aria-pressed', String(r.enabled && Number(b.dataset.value) === Number(r.target)));
+  if (els.valBox && document.activeElement !== els.valBox) {
+    els.valBox.value = r.target === null || r.target === undefined ? '' : fmt(r.target, r.valueType);
+  }
+  if (els.slider && document.activeElement !== els.slider) {
+    const v = r.target ?? r.current;
+    if (v !== null && v !== undefined) { els.slider.value = String(v); if (document.activeElement !== els.valBox) els.valBox.value = fmt(Number(els.slider.value), r.valueType); }
+    els.paint();
   }
   patchValue(r.id, r);
 }
@@ -409,9 +689,9 @@ function patchValue(id, v) {
   if (!els) return;
   const rec = state.snapshot.records.find((r) => r.id === id);
   const waiting = v.status !== 'ok';
-  els.current.textContent = waiting ? 'waiting' : fmt(v.current, rec?.valueType);
-  els.current.classList.toggle('waiting', waiting);
-  els.current.title = waiting && v.error ? `Can't read this right now: ${v.error}` : '';
+  els.now.textContent = waiting ? 'Waiting for the game' : `In game: ${fmt(v.current, rec?.valueType)}`;
+  els.now.classList.toggle('waiting', waiting);
+  els.now.title = waiting && v.error ? `Can't read this right now: ${v.error}` : '';
 }
 
 // ---------- phone remote ----------
@@ -509,10 +789,44 @@ function renderOverlayData() {
     sel.value = d.roles?.[role] || '';
   }
 
+  // Where you are: mods when there are any, else "I'm here" / Find me.
+  const liveTracking = Boolean(d.session && d.roles?.x && d.roles?.y);
+  $('rolesBox').hidden = !d.session;
+  $('hereBox').hidden = liveTracking;
+  $('hereNote').textContent = d.findMe
+    ? 'Keystone can\u2019t follow you live in this game without mods. Press Find me (or Ctrl+Shift+F in game) to put yourself on the map; it types the game\u2019s ccc command, which needs admin. Or click the map where you are.'
+    : 'Keystone can\u2019t follow you live in this game. Click the map where you are to put yourself on the minimap; the marker stays put until you set it again.';
+  $('findMeBtn').hidden = !d.findMe;
+  $('hereClear').hidden = !d.here;
+  $('lineUp').hidden = !(d.findMe && (d.here?.source === 'findme' || d.findMeFixed));
+  $('luReset').hidden = !d.findMeFixed;
+  $('hkFindMe').hidden = !d.findMe;
+
   // Map tools
+  const variantSel = $('variantSel');
+  $('variantRow').hidden = (d.variants || []).length < 2;
+  if (document.activeElement !== variantSel) {
+    variantSel.replaceChildren(...(d.variants || []).map((v) => el('option', { value: v.id, text: v.name })));
+    variantSel.value = d.variant?.id || '';
+  }
+  const hasImage = Boolean(d.map?.url);
   $('mapReset').hidden = !(d.map && d.map.custom && d.pack);
-  $('mapCalibrate').disabled = !d.map;
-  $('mapNote').textContent = !d.map ? '' : d.map.bounds ? (d.map.custom ? 'Your map, lined up.' : `From the ${d.pack} pack.`) : 'This map isn\u2019t lined up yet.';
+  $('mapCalibrate').disabled = !hasImage;
+  $('mapNote').textContent = !d.map ? ''
+    : !hasImage ? 'Grid only. Add a screenshot of the in-game map for a picture.'
+      : d.map.bounds ? (d.map.custom ? 'Your map, lined up.' : `From the ${d.pack} pack.`) : 'This map isn\u2019t lined up yet.';
+  const layerList = $('layerList');
+  layerList.hidden = !(d.layers || []).length;
+  layerList.replaceChildren(...(d.layers || []).map((l) => {
+    const cb = el('input', { type: 'checkbox' });
+    cb.checked = l.on;
+    cb.addEventListener('change', () => call(keystone.setMarkerLayer(l.id, cb.checked)));
+    const sw = el('span', { class: 'sw' });
+    sw.style.background = l.color;
+    return el('label', { class: 'check' }, cb, sw, el('span', { text: l.name }), el('span', { class: 'count', text: String(l.points.length) }));
+  }));
+  $('markerCredits').hidden = !d.markerCredits;
+  $('markerCredits').textContent = d.markerCredits || '';
   for (const input of document.querySelectorAll('[data-edge]')) {
     if (document.activeElement !== input) input.value = d.map?.bounds ? String(Math.round(d.map.bounds[input.dataset.edge] * 100) / 100) : '';
   }
@@ -526,18 +840,26 @@ function renderOverlayData() {
   if (!d.waypoints.length) list.append(el('p', { class: 'wp-empty', text: 'No waypoints yet. Add one here, press Ctrl+Shift+W in game, or click the map in edit mode.' }));
   for (const w of d.waypoints) {
     const name = el('input', { class: 'field', value: w.name, 'aria-label': 'Waypoint name', maxlength: '40' });
-    const x = el('input', { class: 'field num', value: String(Math.round(w.x)), 'aria-label': 'X', inputmode: 'decimal' });
-    const y = el('input', { class: 'field num', value: String(Math.round(w.y)), 'aria-label': 'Y', inputmode: 'decimal' });
+    const ll = d.variant?.units === 'latlon';
+    const x = el('input', { class: 'field num', value: ll ? w.x.toFixed(1) : String(Math.round(w.x)), 'aria-label': ll ? 'Longitude' : 'X', placeholder: ll ? 'Lon' : 'X', inputmode: 'decimal' });
+    const y = el('input', { class: 'field num', value: ll ? w.y.toFixed(1) : String(Math.round(w.y)), 'aria-label': ll ? 'Latitude' : 'Y', placeholder: ll ? 'Lat' : 'Y', inputmode: 'decimal' });
     const isTracked = d.tracked === w.id;
     const track = el('button', { class: `btn small${isTracked ? ' tracking' : ''}`, text: isTracked ? 'Tracking' : 'Track', title: 'Show distance and direction on the minimap' });
     const del = el('button', { class: 'btn small ghost', text: 'Delete' });
+    const go = el('button', { class: 'btn small', text: 'Teleport', title: 'Move your character to this waypoint' });
+    go.hidden = !d.teleport;
+    go.addEventListener('click', async () => {
+      const r = await call(keystone.teleport({ waypointId: w.id }));
+      if (r) toast(`Teleported to ${r.name}.`);
+    });
     const save = (patch) => call(keystone.updateWaypoint(w.id, patch));
     name.addEventListener('change', () => save({ name: name.value }));
     x.addEventListener('change', () => save({ x: x.value }));
     y.addEventListener('change', () => save({ y: y.value }));
     track.addEventListener('click', () => call(keystone.setTracked(isTracked ? null : w.id)));
     del.addEventListener('click', () => call(keystone.removeWaypoint(w.id)));
-    list.append(el('div', { class: 'wp-row' }, name, x, y, track, del));
+    // Lat/lon reads latitude first, the way games show it.
+    list.append(el('div', { class: `wp-row${d.teleport ? ' tp' : ''}` }, name, ...(ll ? [y, x] : [x, y]), track, go, del));
   }
 
   // Panels, zoom
@@ -563,23 +885,55 @@ function renderOverlayData() {
   paintOverlayLive();
 }
 
+// Live position from mods, else the "I'm here" marker.
+function curPos() {
+  if (state.ovLive.pos) return state.ovLive.pos;
+  const h = state.ovData.here;
+  return h ? { x: h.x, y: h.y, z: h.z, facing: null, manual: true, source: h.source, at: h.at } : null;
+}
+
+function coordText(p) {
+  return state.ovData.variant?.units === 'latlon' ? `lat ${p.y.toFixed(1)}, lon ${p.x.toFixed(1)}` : `${Math.round(p.x)}, ${Math.round(p.y)}`;
+}
+
+function agoText(at) {
+  const m = Math.floor((Date.now() - at) / 60000);
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.floor(m / 60)} h ago`;
+}
+
 function paintOverlayLive() {
-  const p = state.ovLive.pos;
+  const p = curPos();
+  const d = state.ovData;
   const out = $('ovPos');
   out.classList.toggle('none', !p);
-  out.textContent = p
-    ? `You're at ${Math.round(p.x)}, ${Math.round(p.y)}${p.z !== null ? `, height ${Math.round(p.z)}` : ''}${p.facing !== null ? `, facing ${Math.round(p.facing)}°` : ''}`
-    : state.ovData.roles?.x && state.ovData.roles?.y ? 'Waiting for the game to report a position.' : 'Choose the X and Y mods to see your position.';
+  out.textContent = !p
+    ? (d.session ? (d.roles?.x && d.roles?.y ? 'Waiting for the game to report a position.' : 'Choose the X and Y mods to see your position.') : 'Position not set.')
+    : p.manual
+      ? `Marked at ${coordText(p)} (${p.source === 'findme' ? 'Find me' : 'clicked'}, ${agoText(p.at)})`
+      : `You're at ${coordText(p)}${p.z !== null ? `, height ${Math.round(p.z)}` : ''}${p.facing !== null ? `, facing ${Math.round(p.facing)}°` : ''}`;
   drawPreview();
 }
 
 function loadPreviewMap() {
   const url = state.ovData.map?.url || null;
+  const gridOnly = !url && Boolean(state.ovData.map?.bounds);
+  const empty = $('mapEmpty');
+  empty.hidden = Boolean(url);
+  empty.classList.toggle('corner', gridOnly);
+  empty.textContent = gridOnly
+    ? `${state.ovData.variant?.units === 'latlon' ? 'Longitude along the top, latitude down the side. ' : ''}No picture yet: choose a screenshot of the full in-game map and it usually lines up on its own.`
+    : 'No map yet. Use a screenshot of the game\u2019s world map, then line it up with two clicks.';
   if (url === state.mapUrl) { drawPreview(); return; }
   state.mapUrl = url;
   state.mapImg = null;
-  $('mapEmpty').hidden = Boolean(url);
-  if (!url) { drawPreview(); return; }
+  if (!url) {
+    const b = state.ovData.map?.bounds;
+    const c = $('mapPreview');
+    c.width = 760;
+    c.height = b ? Math.round(Math.min(520, 760 * Math.abs((b.bottom - b.top) / (b.right - b.left)))) : 420;
+    drawPreview();
+    return;
+  }
   const img = new Image();
   img.onload = () => {
     if (state.mapUrl !== url) return;
@@ -593,12 +947,38 @@ function loadPreviewMap() {
   img.src = url;
 }
 
-// Image fitted inside the preview canvas (contain).
+// What the preview shows, fitted inside the canvas (contain): the map
+// picture, or, for a map with coordinates but no picture, a stand-in "image"
+// with the map's proportions so the same world<->pixel maths works.
 function previewFit() {
   const c = $('mapPreview');
   const img = state.mapImg;
-  const scale = Math.min(c.width / img.naturalWidth, c.height / img.naturalHeight);
-  return { scale, ox: (c.width - img.naturalWidth * scale) / 2, oy: (c.height - img.naturalHeight * scale) / 2 };
+  const b = state.ovData.map?.bounds;
+  let iw;
+  let ih;
+  if (img) { iw = img.naturalWidth; ih = img.naturalHeight; } else if (b) { iw = 1000; ih = 1000 * Math.abs((b.bottom - b.top) / (b.right - b.left)); } else return null;
+  const scale = Math.min(c.width / iw, c.height / ih);
+  return { iw, ih, scale, ox: (c.width - iw * scale) / 2, oy: (c.height - ih * scale) / 2 };
+}
+
+// Canvas pixel (from a mouse event) -> world coordinates, or null.
+function previewWorld(e) {
+  const c = $('mapPreview');
+  const f = previewFit();
+  const b = state.ovData.map?.bounds;
+  if (!f || !b) return null;
+  const rect = c.getBoundingClientRect();
+  const cx = ((e.clientX - rect.left) / rect.width) * c.width;
+  const cy = ((e.clientY - rect.top) / rect.height) * c.height;
+  return MapMath.imageToWorld(b, f.iw, f.ih, (cx - f.ox) / f.scale, (cy - f.oy) / f.scale);
+}
+
+function markerShape(ctx, shape, x, y, r) {
+  ctx.beginPath();
+  if (shape === 'square') ctx.rect(x - r, y - r, r * 2, r * 2);
+  else if (shape === 'diamond') { ctx.moveTo(x, y - r - 1); ctx.lineTo(x + r + 1, y); ctx.lineTo(x, y + r + 1); ctx.lineTo(x - r - 1, y); ctx.closePath(); }
+  else if (shape === 'triangle') { ctx.moveTo(x, y - r - 1); ctx.lineTo(x + r + 1, y + r); ctx.lineTo(x - r - 1, y + r); ctx.closePath(); }
+  else ctx.arc(x, y, r, 0, Math.PI * 2);
 }
 
 function drawPreview() {
@@ -606,15 +986,55 @@ function drawPreview() {
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, c.width, c.height);
   const img = state.mapImg;
-  if (!img) return;
-  const f = previewFit();
-  ctx.drawImage(img, f.ox, f.oy, img.naturalWidth * f.scale, img.naturalHeight * f.scale);
   const b = state.ovData.map?.bounds;
+  const f = previewFit();
+  if (!f) return;
   const toCanvas = (x, y) => {
-    const p = MapMath.worldToImage(b, img.naturalWidth, img.naturalHeight, x, y);
+    const p = MapMath.worldToImage(b, f.iw, f.ih, x, y);
     return { x: f.ox + p.x * f.scale, y: f.oy + p.y * f.scale };
   };
+  if (img) {
+    ctx.drawImage(img, f.ox, f.oy, f.iw * f.scale, f.ih * f.scale);
+  } else {
+    // Grid-only map: a line every 10 units, labelled along the edges.
+    ctx.fillStyle = '#12151a';
+    ctx.fillRect(f.ox, f.oy, f.iw * f.scale, f.ih * f.scale);
+    const span = Math.abs(b.right - b.left);
+    const step = [1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 10000].find((s) => span / s <= 12) || span / 10;
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = '500 10px Geist, sans-serif';
+    ctx.lineWidth = 1;
+    for (let v = Math.ceil(Math.min(b.left, b.right) / step) * step; v <= Math.max(b.left, b.right); v += step) {
+      const p = toCanvas(v, b.top);
+      ctx.beginPath(); ctx.moveTo(p.x, f.oy); ctx.lineTo(p.x, f.oy + f.ih * f.scale); ctx.stroke();
+      ctx.fillText(String(v), p.x + 3, f.oy + 12);
+    }
+    for (let v = Math.ceil(Math.min(b.top, b.bottom) / step) * step; v <= Math.max(b.top, b.bottom); v += step) {
+      const p = toCanvas(b.left, v);
+      ctx.beginPath(); ctx.moveTo(f.ox, p.y); ctx.lineTo(f.ox + f.iw * f.scale, p.y); ctx.stroke();
+      if (v !== b.top) ctx.fillText(String(v), f.ox + 3, p.y - 3);
+    }
+  }
   if (b) {
+    for (const l of state.ovData.layers || []) {
+      if (!l.on) continue;
+      for (const m of l.points) {
+        const p = toCanvas(m.x, m.y);
+        markerShape(ctx, l.shape, p.x, p.y, 4);
+        ctx.fillStyle = l.color;
+        ctx.fill();
+        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = '#0e1115';
+        ctx.stroke();
+        ctx.font = '500 11px Geist, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.shadowColor = 'rgba(0,0,0,.8)';
+        ctx.shadowBlur = 3;
+        ctx.fillText(m.name, p.x + 7, p.y + 4);
+        ctx.shadowBlur = 0;
+      }
+    }
     for (const w of state.ovData.waypoints || []) {
       const p = toCanvas(w.x, w.y);
       ctx.beginPath();
@@ -628,24 +1048,32 @@ function drawPreview() {
       ctx.fillText(w.name, p.x + 7, p.y + 4);
       ctx.shadowBlur = 0;
     }
-    const pos = state.ovLive.pos;
+    const pos = curPos();
     if (pos) {
       const p = toCanvas(pos.x, pos.y);
+      const cs = getComputedStyle(document.documentElement);
       ctx.beginPath();
       ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
-      ctx.fillStyle = '#c48aff';
-      ctx.shadowColor = 'rgba(196,138,255,.8)';
-      ctx.shadowBlur = 10;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#0e1115';
-      ctx.stroke();
+      if (pos.manual) {
+        // "I'm here" is a ring: it marks a spot, it doesn't track you.
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = cs.getPropertyValue('--accent').trim();
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = cs.getPropertyValue('--accent').trim();
+        ctx.shadowColor = cs.getPropertyValue('--accent-glow').trim();
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#0e1115';
+        ctx.stroke();
+      }
     }
   }
   if (state.calib?.a) {
     const p = { x: f.ox + state.calib.a.px.x * f.scale, y: f.oy + state.calib.a.px.y * f.scale };
-    ctx.strokeStyle = '#c48aff';
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(p.x - 8, p.y); ctx.lineTo(p.x + 8, p.y); ctx.moveTo(p.x, p.y - 8); ctx.lineTo(p.x, p.y + 8);
@@ -653,8 +1081,17 @@ function drawPreview() {
   }
 }
 
+function setPlacing(on) {
+  state.placing = on;
+  if (on && state.calib) setCalib(null);
+  $('mapPreviewWrap').classList.toggle('placing', on);
+  $('hereBtn').classList.toggle('on', on);
+  $('hereBtn').textContent = on ? 'Click where you are on the map below' : 'I\u2019m here: click the map';
+}
+
 function setCalib(next) {
   state.calib = next;
+  if (next && state.placing) setPlacing(false);
   const banner = $('calibBanner');
   $('mapPreviewWrap').classList.toggle('calibrating', Boolean(next));
   $('mapCalibrate').textContent = next ? 'Cancel lining up' : 'Line up the map';
@@ -684,9 +1121,21 @@ function wireOverlay() {
   $('mapReset').addEventListener('click', () => call(keystone.resetMap()));
   $('mapCalibrate').addEventListener('click', () => setCalib(state.calib ? null : {}));
   $('mapPreview').addEventListener('click', async (e) => {
+    if (state.placing) {
+      const w = previewWorld(e);
+      if (!w) return;
+      const ll = state.ovData.variant?.units === 'latlon';
+      const r = (n) => (ll ? Math.round(n * 10) / 10 : Math.round(n));
+      setPlacing(false);
+      const h = await call(keystone.setHere({ x: r(w.x), y: r(w.y) }));
+      if (h) toast(`Marked you at ${coordText(h)}.`);
+      return;
+    }
     if (!state.calib || !state.mapImg) return;
-    const pos = state.ovLive.pos;
-    if (!pos) { toast('Keystone needs your position first. Choose the X and Y mods above.', 'error'); return; }
+    // Lining up a picture needs to know where you are: from mods, or a
+    // fresh Find me before each click.
+    const pos = curPos();
+    if (!pos) { toast('Keystone needs your position first: choose the X and Y mods above, or press Find me.', 'error'); return; }
     const c = $('mapPreview');
     const rect = c.getBoundingClientRect();
     const cx = ((e.clientX - rect.left) / rect.width) * c.width;
@@ -701,6 +1150,29 @@ function wireOverlay() {
     const b = {};
     for (const input of document.querySelectorAll('[data-edge]')) b[input.dataset.edge] = input.value.trim();
     call(keystone.setMapBounds(b)).then((r) => r && toast('Map edges saved.'));
+  });
+
+  $('variantSel').addEventListener('change', (e) => call(keystone.setMapVariant(e.target.value)));
+  $('hereBtn').addEventListener('click', () => {
+    if (!state.ovData.map?.bounds) { toast('This map isn\u2019t lined up yet, so Keystone can\u2019t tell where a click is. Line up the map first.', 'error'); return; }
+    setPlacing(!state.placing);
+  });
+  $('hereClear').addEventListener('click', () => call(keystone.clearHere()));
+  $('findMeBtn').addEventListener('click', async () => {
+    const b = $('findMeBtn');
+    b.disabled = true;
+    b.textContent = 'Finding you\u2026';
+    const h = await call(keystone.findMe());
+    b.disabled = false;
+    b.textContent = 'Find me';
+    if (h) toast(`Found you at ${coordText(h)}.`);
+  });
+  $('luSave').addEventListener('click', async () => {
+    const r = await call(keystone.lineUpFindMe({ lat: $('luLat').value.trim(), lon: $('luLon').value.trim() }));
+    if (r) { toast('Find me is lined up for this map.'); $('luLat').value = ''; $('luLon').value = ''; }
+  });
+  $('luReset').addEventListener('click', async () => {
+    if (await call(keystone.resetFindMe())) toast('Back to the pack\u2019s values for this map.');
   });
 
   $('wpAdd').addEventListener('click', async () => {
@@ -720,8 +1192,8 @@ function wireOverlay() {
   });
 
   keystone.onOverlayStatus((s) => { state.ovStatus = s; renderOverlayStatus(); });
-  keystone.onOverlayData((d) => { state.ovData = d; if (state.view === 'overlay') renderOverlayData(); });
-  keystone.onOverlayLive((v) => { state.ovLive = v; if (state.view === 'overlay') paintOverlayLive(); });
+  keystone.onOverlayData((d) => { state.ovData = d; if (isPane('overlay')) renderOverlayData(); });
+  keystone.onOverlayLive((v) => { state.ovLive = v; if (isPane('overlay')) paintOverlayLive(); });
 }
 
 async function loadOverlay() {
@@ -735,6 +1207,9 @@ async function loadOverlay() {
 
 // ---------- commands ----------
 const SEG_LABEL = { creatures: 'Creatures', items: 'Items', quick: 'Quick commands', raw: 'Type a command' };
+// Catalogs a pack names something else ("npcs", "ghosts") fall back to a
+// capitalized id.
+const segLabel = (sg) => SEG_LABEL[sg] || sg.charAt(0).toUpperCase() + sg.slice(1);
 
 function cmdSegments(info) {
   const segs = info.catalogs.filter((c) => info.actions.some((a) => a.catalog === c));
@@ -760,7 +1235,7 @@ function renderCommands() {
   }
   const snap = state.snapshot;
   const running = snap.attached && !snap.game.offline;
-  $('cmdSub').textContent = `${info.pack}. Pick what you want, set the details, and Keystone runs the admin command for you.`;
+  $('cmdSub').textContent = `${info.pack}. Pick what you want, set the details, and Keystone runs the command for you.`;
   const st = info.settings;
   $('cmdLogin').hidden = !st.canEnable || !running;
 
@@ -778,7 +1253,7 @@ function renderCommands() {
   const segs = cmdSegments(info);
   if (!segs.includes(c.seg)) c.seg = segs[0];
   $('cmdSegments').replaceChildren(...segs.map((sg) => {
-    const b = el('button', { text: SEG_LABEL[sg] || sg, 'aria-pressed': String(sg === c.seg) });
+    const b = el('button', { text: segLabel(sg), 'aria-pressed': String(sg === c.seg) });
     b.addEventListener('click', () => { c.seg = sg; renderCommands(); });
     return b;
   }));
@@ -798,6 +1273,11 @@ function renderCmdSettings(st) {
     $('setKey').value = st.consoleKey;
     $('setPrefix').replaceChildren(...st.prefixes.map((p) => el('option', { value: p, text: p ? `${p} (e.g. ${p} God)` : 'None' })));
     $('setPrefix').value = st.prefix;
+    // Paste only where the game's console supports it; prefix only when
+    // there's a choice to make.
+    $('setMode').querySelector('option[value="paste"]').hidden = !st.pasteSupported;
+    $('setMode').closest('label').hidden = !st.pasteSupported;
+    $('setPrefix').closest('label').hidden = st.prefixes.length < 2;
     $('setMode').value = st.mode;
     $('setAdminPw').placeholder = st.hasAdminPassword ? 'Saved. Type to replace it' : 'Server admin password';
     $('rconHost').value = st.rcon.host;
@@ -904,6 +1384,13 @@ function fieldInput(f, bag, onChange) {
     cb.checked = Boolean(bag[f.key]);
     cb.addEventListener('change', () => { bag[f.key] = cb.checked; onChange(); });
     return el('label', { class: 'check' }, cb, el('span', { text: f.label }));
+  }
+  if (f.type === 'choice') {
+    const sel = el('select', { class: 'field' }, ...f.options.map((o) => el('option', { value: String(o.value), text: o.label })));
+    if (!f.options.some((o) => String(o.value) === String(bag[f.key]))) bag[f.key] = String(f.options[0].value);
+    sel.value = String(bag[f.key]);
+    sel.addEventListener('change', () => { bag[f.key] = sel.value; onChange(); });
+    return el('label', {}, el('span', { text: f.label }), sel);
   }
   const input = el('input', { class: 'field', value: String(bag[f.key] ?? ''), inputmode: f.type === 'number' ? 'numeric' : 'text', autocomplete: 'off' });
   input.addEventListener('input', () => { bag[f.key] = input.value; onChange(); });
@@ -1049,7 +1536,7 @@ function wireCommands() {
     const packChanged = info.pack !== state.cmd.info?.pack;
     state.cmd.info = info;
     if (packChanged) { state.cmd.catalogs = {}; state.cmd.selected = null; $('catCategory').dataset.for = ''; }
-    if (state.view === 'commands') {
+    if (isPane('commands')) {
       // History/settings updates shouldn't rebuild the catalog grid.
       if (packChanged) renderCommands();
       else { renderHistory(info.history); renderCmdSettings(info.settings); }
@@ -1122,7 +1609,7 @@ function guideCard(g) {
 }
 
 function renderLibHome(main, info) {
-  const kids = [el('h1', { text: info.game }), el('p', { class: 'lib-sub', text: 'Guides, creature and item pages, and your own notes. Search covers everything.' })];
+  const kids = [el('h1', { text: info.game }), el('p', { class: 'lib-sub', text: 'Guides, reference pages and your own notes. Search covers everything.' })];
   if (info.sections.length) {
     kids.push(el('div', { class: 'lib-section-head' }, el('h2', { text: 'Browse' })));
     kids.push(el('div', { class: 'guide-cards' }, ...info.sections.map((sct) => {
@@ -1204,7 +1691,8 @@ async function renderLibEntry(main, page) {
   if (e.category) add('Category', el('span', { text: e.category }));
   if (e.map) add('Map', el('span', { text: e.map }));
   if (e.stack) add('Stack size', el('span', { text: String(e.stack) }));
-  add(page.catalog === 'creatures' ? 'Creature ID' : 'Class name', [el('code', { text: e.id }), copyBtn(e.id)]);
+  const section = state.lib.info.sections.find((x) => x.catalog === page.catalog);
+  add(section?.idLabel || 'ID', [el('code', { text: e.id }), copyBtn(e.id)]);
   if (e.blueprint) add('Blueprint', [el('code', { text: e.blueprint }), copyBtn(e.blueprint)]);
 
   const actions = e.commandActions.map((a) => {
@@ -1235,7 +1723,7 @@ async function renderLibEntry(main, page) {
 function openInCommands(catalog, entry, actionId) {
   state.cmd.pendingSelect = { catalog, id: entry.id, name: entry.name, action: actionId };
   state.cmd.seg = catalog;
-  document.querySelector('[data-view=commands]').click();
+  setTab('commands');
 }
 
 async function renderLibGuide(main, page) {
@@ -1279,16 +1767,32 @@ async function loadAppSettings() {
   const st = await call(keystone.appSettings());
   if (!st) return;
   $('setTray').checked = st.closeToTray;
+  $('setAuto').checked = st.autoAttach;
   $('setLogin').checked = st.startWithWindows;
   $('setLogin').disabled = !st.canStartWithWindows;
   $('loginNote').textContent = st.canStartWithWindows
     ? 'It starts quietly in the tray.'
     : 'Available in the installed app. You\u2019re running Keystone from its source folder.';
   $('aboutLine').textContent = `Keystone ${st.version}. Settings folder: ${st.dataDir}`;
+  renderSwatches(st.accent);
+}
+
+function renderSwatches(current) {
+  $('swatches').replaceChildren(...KeystoneTheme.ACCENTS.map((a) => {
+    const b = el('button', { class: 'swatch', role: 'radio', 'aria-checked': String(a.id === (current || 'keystone')), title: a.label },
+      el('span', { class: 'chip-color', style: { background: a.hex } }), el('span', { text: a.label }));
+    b.addEventListener('click', async () => {
+      KeystoneTheme.applyAccent(a.id);
+      const st = await call(keystone.setAccent(a.id));
+      if (st) renderSwatches(st.accent);
+    });
+    return b;
+  }));
 }
 
 function wireAppSettings() {
   $('setTray').addEventListener('change', (e) => call(keystone.setCloseToTray(e.target.checked)));
+  $('setAuto').addEventListener('change', (e) => call(keystone.setAutoAttach(e.target.checked)));
   $('setLogin').addEventListener('change', async (e) => {
     const res = await call(keystone.setStartWithWindows(e.target.checked));
     if (!res) e.target.checked = !e.target.checked;
@@ -1302,12 +1806,8 @@ function wire() {
   wireAppSettings();
   wireLibrary();
   wireCommands();
-  $('noModsCommands').addEventListener('click', () => document.querySelector('[data-view=commands]').click());
+  $('noModsCommands').addEventListener('click', () => setTab('commands'));
   wireOverlay();
-  $('switcherBtn').addEventListener('click', (e) => { e.stopPropagation(); setSwitcher($('switcherPop').hidden); });
-  $('pickGameBtn').addEventListener('click', (e) => { e.stopPropagation(); setSwitcher(true); });
-  document.addEventListener('click', (e) => { if (!e.target.closest('.switcher')) setSwitcher(false); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setSwitcher(false); });
 
   // Sidebar collapse is a per-machine preference, so browser storage is fine.
   const collapsed = (() => { try { return localStorage.getItem('keystone.navCollapsed') === '1'; } catch { return false; } })();
@@ -1320,26 +1820,43 @@ function wire() {
   });
   wireProfiles();
   wireRemote();
-  for (const t of document.querySelectorAll('.tab')) {
-    t.addEventListener('click', () => {
-      state.view = t.dataset.view;
-      render();
-      if (state.view === 'phone') loadRemote();
-      if (state.view === 'overlay') loadOverlay();
-      if (state.view === 'commands') loadCommands();
-      if (state.view === 'settings') loadAppSettings();
-      if (state.view === 'library') loadLibrary();
-      if (state.view !== 'overlay' && state.calib) setCalib(null);
-    });
-  }
+  for (const t of document.querySelectorAll('.nav .tab')) t.addEventListener('click', () => go(t.dataset.view));
+  for (const b of document.querySelectorAll('#gameTabs button')) b.addEventListener('click', () => setTab(b.dataset.tab));
+
   $('refreshBtn').addEventListener('click', refreshProcesses);
-  $('procSearch').addEventListener('input', (e) => { state.procFilter = e.target.value; renderProcesses(); });
+  $('gameSearch').addEventListener('input', (e) => { state.gameSearch = e.target.value; renderHome(); });
+  $('homeFilter').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-filter]');
+    if (b) { state.homeFilter = b.dataset.filter; renderHome(); }
+  });
+  $('procSearch').addEventListener('input', (e) => { state.procFilter = e.target.value; renderHome(); });
   $('modSearch').addEventListener('input', (e) => { state.filter = e.target.value; renderMods(); });
-  $('demoBtn').addEventListener('click', () => attach({ demo: true }));
   $('detachBtn').addEventListener('click', async () => {
     const snap = await call(keystone.detach());
-    if (snap) { state.snapshot = snap; render(); }
+    if (snap) { state.snapshot = snap; go('home'); }
   });
+  $('playBtn').addEventListener('click', async () => {
+    const id = state.snapshot.packId;
+    if (!id) return;
+    state.launching = true;
+    render();
+    if (await call(keystone.launchGame(id)) === undefined) { state.launching = false; render(); return; }
+    toast('Starting the game. Keystone connects as soon as it’s running.');
+  });
+
+  // Offline-only games: mods stay off until the person turns them on and
+  // accepts the warning.
+  $('modsSwitch').addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const on = b.dataset.v === 'on';
+    const snap = state.snapshot;
+    if (on === (snap.modsBlocked !== 'offline-off')) return;
+    if (on && !(await confirmBox(`${snap.offlineNote || 'Mods only work offline.'}\n\nOnly turn mods on when you’re playing offline or solo. Using them online can get your account banned.`, 'Turn mods on'))) return;
+    const res = await call(keystone.setModsEnabled(on));
+    if (res) { state.snapshot = res.snapshot; render(); for (const n of res.notices) toast(n); }
+  });
+
   const openTable = async () => {
     const res = await call(keystone.openTable());
     if (!res) return;
@@ -1354,12 +1871,14 @@ function wire() {
 
   keystone.onStructure((snap) => {
     const before = `${state.snapshot.game?.key}|${state.snapshot.game?.offline}`;
+    const after = `${snap.game?.key}|${snap.game?.offline}`;
     state.snapshot = snap;
+    if (!snap.game?.offline) state.launching = false;
     render();
     // A different game (or the game starting/stopping) changes what the
-    // Commands screen can do, so refresh it then, not on every mod toggle.
-    if (state.view === 'commands' && before !== `${snap.game?.key}|${snap.game?.offline}`) loadCommands();
-    if (state.view === 'library' && before !== `${snap.game?.key}|${snap.game?.offline}`) loadLibrary();
+    // Commands and Library screens can do, so refresh them then, not on
+    // every mod toggle.
+    if (before !== after) loadTab();
   });
   keystone.onValues((vals) => {
     for (const [id, v] of Object.entries(vals)) {
@@ -1368,14 +1887,26 @@ function wire() {
       patchValue(id, v);
     }
   });
-  keystone.onDetached(({ name }) => toast(`${name} closed, so Keystone detached.`));
+  keystone.onDetached(({ name }) => toast(`${name.replace(/\.exe$/i, '')} closed.`));
+  // A game started outside Keystone was picked up. From the library, go to
+  // its page; anywhere else (Settings, the phone screen) just say so.
+  keystone.onAutoAttached(({ game, notices }) => {
+    state.launching = false;
+    toast(`${game} detected.`);
+    for (const n of notices || []) toast(n);
+    if (state.view === 'home') { state.gameTab = defaultTab(state.snapshot); go('game'); }
+  });
+  keystone.onNotice((msg) => { state.launching = false; render(); if (msg) toast(msg, 'error'); });
+  keystone.onAppearance((a) => KeystoneTheme.applyAccent(a.accent));
 
-  // Keep the picker fresh while nothing is attached (games get launched after Keystone).
-  setInterval(() => { if (!state.snapshot.attached && !document.hidden) refreshProcesses(); }, 5000);
+  // Keep the library fresh (games get launched after Keystone).
+  setInterval(() => { if (state.view === 'home' && !document.hidden) refreshProcesses(); }, 5000);
 }
 
 (async function init() {
   wire();
+  const look = await call(keystone.appearance());
+  KeystoneTheme.applyAccent(look?.accent);
   const p = await call(keystone.platform());
   if (p) state.platform = p.platform;
   const snap = await call(keystone.getSession());

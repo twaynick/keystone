@@ -2,7 +2,10 @@
 
 A mod control panel for single-player PC games. Load a Cheat Engine table for a game and its values become switches you can lock or set from a clean desktop app.
 
-**Scope:** offline and single-player games only. Keystone reads and writes another program's memory the same way Cheat Engine does. It doesn't hide from, bypass, or work around anti-cheat. If a game blocks it, that game isn't supported.
+**Mods and online games:** memory mods are for offline and single-player play. Keystone reads and writes another program's memory the same way Cheat Engine does, and it never hides from, bypasses or works around anti-cheat.
+
+- Games with an offline or solo mode are flagged **Offline only**. Their mods stay off until you turn on **Use mods in this game** and accept the warning, and Keystone doesn't touch the game's memory at all while they're off.
+- Games with no offline mode never get mods. Their Library, commands (where the game has them), map and overlay still work, because none of those touch the game.
 
 ## Install
 
@@ -22,6 +25,8 @@ The installer isn't code-signed, so the first time Windows shows *"Windows prote
   git push origin v0.7.0
   ```
   When the **Build installer** action finishes, the installer is on the repo's **Releases** page.
+
+  Release zips hold everything inside a top-level `keystone/` folder. Its *contents* go at the root of your repo (next to `.github/`), not the folder itself. The build checks that the tag matches the version in `package.json` and stops with an explanation if it doesn't, rather than publishing an old installer under the new tag.
 - **On your own PC:** `npm install`, then `npm run dist`. The installer lands in `dist/`.
 
 ### Running from source (for development)
@@ -44,14 +49,30 @@ Run the tests with `npm test`.
 
 ## Using it
 
-1. Start your game.
-2. In Keystone, open the game switcher at the top and pick the game. Click **Refresh** if you launched it after Keystone.
-3. Click **Load cheat table** and choose a `.CT` file made for that game (and that game version).
-4. For each mod:
-   - **Lock** keeps the value fixed. With the value box empty, it locks whatever the game has right now. With a number typed in, it locks that number.
-   - **Set** writes the number once and lets the game keep changing it.
+**Games** (the home screen) shows every game Keystone has a pack for, with its cover art. Games installed on your PC (found in Steam, the Epic Games Launcher, GOG Galaxy and the Xbox app) come first and say which store they're from; the **All / Installed / Running** tabs filter the list. Pick one to open its page:
 
-Mods show **waiting** while their address can't be read, which is normal on loading screens and main menus. Locked mods stay locked and start writing again as soon as the game is back.
+- **Play** starts the game through the store it's installed from, and Keystone connects as soon as it's running.
+- Started the game some other way? Keystone notices it within a few seconds and connects (turn this off in **Settings → Attach to games automatically**). It won't switch away from a game page you have open, and if you close a running game's page, it leaves that game alone until it restarts.
+- Tabs across the top: **Mods**, **Commands**, **Library**, **Map & overlay**.
+- The **×** closes the game page.
+
+Games without a pack are under **Other running programs** on the home screen; pick one and load your own Cheat Engine table.
+
+### Mods
+
+Mods are grouped like the cheat table's groups, with tabs to show one group at a time. Each mod has the control that suits it:
+
+- **Off / On**: On keeps the value where it is (or at the number in the box).
+- **Value box + Apply**: writes the number once and lets the game keep changing it.
+- **Slider**, **steps** (like 1K / 10K / 100K) and one-tap **Apply** buttons where the game's pack sets them up.
+
+**Saved mods** stores which mods are on and their values, per game, and can turn them back on when the game starts.
+
+**Hotkeys:** hover a mod and click **+ Key**, then press the keys you want (F-keys and numpad keys work alone; letters and digits need Ctrl or Alt so typing in game chat can't trigger them). A hotkey switches the mod on and off, steps through its values, or applies it, and works while the game is in front. The result flashes in the overlay. Hotkeys are only active while Keystone is connected to that game's mods.
+
+**Pins:** hover a mod and click the pin. Pinned mods get their own **Pinned** tab and show in the overlay's **Mods** panel with their hotkeys and On/Off state (click them there while editing the overlay layout).
+
+Mods show **Waiting for the game** while their address can't be read, which is normal on loading screens and main menus. Locked mods stay locked and start writing again as soon as the game is back.
 
 ### Library
 
@@ -97,14 +118,14 @@ Passwords are stored encrypted with your Windows account's key.
 
 When a game's memory can't be read (anti-cheat), Keystone still selects it: Mods are unavailable, but Commands, the map and waypoints work.
 
-### Profiles
+### Saved mods
 
-A profile saves which mods are locked and the values in their boxes, per game.
+A saved set records which mods are on and the values in their boxes, per game.
 
-- **Save profile** stores the current setup under a name. After that, **Save** updates it and **Save as new** makes a copy.
+- **Save these mods** stores the current setup under a name. After that, **Save** updates it and **Save as new** makes a copy.
 - Pick a profile from the list to apply it. Mods the profile doesn't lock get unlocked.
 - **Unsaved changes** appears when your locks differ from the selected profile.
-- In the **⋯** menu, **Apply this profile when the game starts** (on by default) re-applies it the next time you attach to that game.
+- In the **⋯** menu, **Turn these mods on when the game starts** (on by default) re-applies them the next time the game is connected.
 - Keystone also remembers which cheat tables you loaded for each game and reloads them on attach, so profiles always have their mods available.
 
 Settings live in `%APPDATA%\Keystone\games\<game>.exe.json`.
@@ -141,10 +162,24 @@ Hotkeys while playing:
 | Keys | Does |
 | --- | --- |
 | Ctrl+Shift+O | Show or hide the overlay |
-| Ctrl+Shift+E | Edit layout: drag panels, click the minimap to add a waypoint, scroll to zoom |
+| Ctrl+Shift+E | Edit layout: drag panels; on the minimap, **Pin** adds a waypoint where you click and **Here** marks where you are; right-click teleports, scroll zooms |
 | Ctrl+Shift+W | Drop a waypoint where you're standing |
+| Ctrl+Shift+G | Teleport to the tracked waypoint |
+| Ctrl+Shift+F | Find me (ARK; only registered while ARK is selected) |
 
-Waypoints can be renamed, moved, tracked (distance and direction show under the minimap) and deleted in the Overlay tab.
+#### Without mods: online games, BattlEye servers
+
+The map works without reading the game at all:
+
+- **I'm here:** click **I'm here** under *Where you are*, then click your spot on the map (or use **Here** on the minimap while editing the overlay). The marker is a ring, not an arrow: it stays where you put it until you set it again.
+- **Marker layers:** game packs can add points of interest (ARK's Island has its artifact caves and artifacts). Turn each layer on or off under the map.
+- **ARK Find me:** press **Find me** or Ctrl+Shift+F in game. Keystone types `ccc` into the console (you need to be logged in as admin), reads the position ARK copies to the clipboard, puts your clipboard back, and drops the marker on your map in the lat/lon the in-game map uses. Pick which ARK map you're on in the *Map* list.
+  - ARK: Survival Ascended's map screen uses different numbers from the older GPS coordinates, and the conversion isn't published. The Island uses a scale worked out from cave locations both ways; the other maps start from the ARK: Survival Evolved values. If the marker lands in the wrong spot, open **Marker in the wrong spot?**, type the lat/lon your in-game map shows, and Keystone fixes the scale for that map.
+- A lat/lon map draws a grid until you add a picture. A screenshot of the whole in-game map usually lines up without any clicks; if not, **Line up the map** works with Find me: Find me, click your spot, move far away, Find me, click again.
+
+Waypoints can be renamed, moved, tracked (distance and direction show under the minimap), teleported to and deleted in the Overlay tab. The phone remote lists them too, with a **Go** button each.
+
+**Teleporting** writes your position through the game's position mods, so it needs mods connected and the X and Y position mods set in the Overlay tab (game packs set them for you). It holds the new spot for a moment so the game doesn't pull you back. If the waypoint has no height saved, you keep your current height, so on hilly maps you may land inside a slope; walk or jump out. Games with a teleport console command can use that instead, and then it works without mods. Offline-only games follow the same rule as other mods: off until you turn mods on for that game.
 
 Notes:
 
@@ -181,6 +216,9 @@ Many popular tables are mostly scripts. Tables built from pointer scans (plain a
 ```
 src/main/            Electron main process
   main.js            windows, IPC, single instance, start with Windows
+  art.js             game cover and banner art (Steam CDN, cached)
+  installed.js       finds installed games (Steam, Epic, GOG, Xbox app)
+  hotkeys.js         per-mod hotkey rules and registration
   tray.js            system tray icon and menu
   library.js         Library: catalog pages, Markdown guides, notes, search
   browser-window.js  Keystone's browser window (Ctrl+Shift+B)
@@ -212,15 +250,55 @@ src/remote-web/      phone web app (served to the phone by remote/server.js)
 src/overlay/         overlay page (minimap, stats, info)
 src/browser/         the browser window's toolbar page
 assets/              app icons
-src/shared/          shared styles, Geist fonts (OFL), map math
+src/shared/          shared styles, accent themes, Geist fonts (OFL), map math
 packs/demo/          the demo game's pack: table, map, waypoints, info
 packs/ark-survival-ascended/  ASA pack: commands, creature and item IDs, guides
+packs/fallout-4/     Fallout 4 pack: console commands, 648 base-game items, guides
 test/                node:test suite
 scripts/capture.js   dev helper: launch, run a snippet, save a screenshot
 .github/workflows/   builds the Windows installer when a version tag is pushed
 ```
 
 ## Changelog
+
+### 0.14.0
+- Map for any game, mods or not: an **I'm here** marker you set by clicking the map, and per-pack marker layers you can switch on and off.
+- ARK: pick which map you're on; **Find me** (button or Ctrl+Shift+F) reads your position with `ccc` and converts it to the in-game map's lat/lon, with a one-time line-up if it's off. The Island ships with its 10 artifact caves and 3 artifact spots.
+- Lat/lon maps show a grid with coordinates until you add a picture; custom map pictures, waypoints and layer choices are kept per map.
+
+### 0.13.1
+- The installer build stops if the tag doesn't match `package.json` (v0.13.0's release got the 0.8.0 installer this way), and says so when a release zip was unpacked one folder too deep.
+
+### 0.13.0
+- Teleport to any waypoint: a Teleport button on each waypoint, Ctrl+Shift+G for the tracked one, right-click on the overlay map while editing, and a Teleport list on the phone.
+- Locked position mods stay locked at the new spot; game packs can tune the landing height and hold time, or teleport by console command.
+- The demo game carries on from where you teleport it.
+
+### 0.12.0
+- Finds games installed through Steam, Epic, GOG and the Xbox app (Game Pass), marks them in the library with their store, and lists them first.
+- Play works for any of those stores, not just Steam.
+- Auto-attach: games started outside Keystone are picked up a few seconds after they start. Can be turned off in Settings.
+- All / Installed / Running filters on the home screen.
+
+### 0.11.0
+- Hotkeys per mod, with rules that keep typing in game from triggering them; each press flashes the result in the overlay.
+- Pinned mods: a Pinned tab and a Mods panel in the in-game overlay.
+- Mods react to hotkeys by control type: Off/On, step through values, or apply once.
+
+### 0.10.0
+- New look modeled on Wand's app: a cover-art game library, game pages with a banner and Play button, pill tabs, mods in glass panels with Off/On toggles, sliders, steps and Apply buttons, and category tabs.
+- Accent color picker in Settings (Keystone purple by default), applied to the app, overlay, browser and phone.
+- Play starts a game through Steam (or the store its pack names) and connects automatically once it's running.
+- Offline-only games: mods stay off, and Keystone doesn't open the game's memory, until you turn them on for that game and accept the warning. Online-only games never get mods.
+- When a game closes, its page stays open (map, Library, commands) instead of resetting.
+- Game packs can give mods friendly names and controls; the demo pack shows each kind.
+
+### 0.9.0
+- Fallout 4 pack: 648 base-game items with Form IDs (weapons, armor, ammo, aid, components and shipments, magazines, misc), give or drop any of them, and 16 quick commands (god mode, no clip, caps, perk points, level, S.P.E.C.I.A.L., carry weight, run speed, time and more). Three guides, and item pages link to their exact Fallout Wiki page.
+- Console support for games whose console stays open after Enter (Bethesda games): Keystone opens it once, runs every line, then closes it.
+- Dropdown fields in command forms; paste mode and the prefix setting only show where a game supports them.
+
+Fallout 4 item data comes from the community-maintained [Independent Fallout Wiki](https://fallout.wiki).
 
 ### 0.8.0
 - Library: creature and item pages with IDs and one-click jumps into Commands, Markdown guides (the pack's and your own), personal notes per entry, and search across everything.

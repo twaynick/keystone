@@ -53,6 +53,7 @@ function connect() {
     if (msg.type === 'snapshot') { app.snapshot = msg.data; render(); }
     else if (msg.type === 'values') patchValues(msg.data);
     else if (msg.type === 'result') settle(msg);
+    else if (msg.type === 'appearance' && window.KeystoneTheme) KeystoneTheme.applyAccent(msg.data.accent);
   };
   ws.onclose = (e) => {
     app.ws = null;
@@ -144,10 +145,14 @@ function render() {
     return show('idle');
   }
   $('game').textContent = s.game.name === 'demo.exe' ? 'Demo game' : s.game.name.replace(/\.exe$/i, '');
-  if (!s.records.length) return show('noMods');
+  // Teleport can work without mods (games with a teleport command), so a
+  // game with waypoints still gets a screen.
+  const tp = s.teleport && s.teleport.waypoints.length ? s.teleport : null;
+  if (!s.records.length && !tp) return show('noMods');
   show('mods');
   renderProfiles();
   renderList();
+  renderTeleport(tp);
   if (app.sheetId) fillSheet();
 }
 
@@ -190,23 +195,48 @@ function renderList() {
       continue;
     }
     const value = el('span', { class: 'row-value' });
-    const main = el('button', { class: 'row-main', 'aria-label': `Edit ${r.name}` }, el('span', { class: 'row-name', text: r.name }), value);
+    const main = el('button', { class: 'row-main', 'aria-label': `Edit ${r.name}` }, el('span', { class: 'row-name', text: r.label || r.name }), value);
     main.addEventListener('click', () => openSheet(r.id));
-    const toggle = el('input', { type: 'checkbox', role: 'switch', 'aria-label': `Lock ${r.name}` });
-    toggle.checked = r.enabled;
-    toggle.addEventListener('change', async () => {
-      try {
-        await send({ type: 'toggle', id: r.id, enabled: toggle.checked });
-      } catch {
-        toggle.checked = !toggle.checked;
-      }
-    });
-    const row = el('div', { class: `row${r.enabled ? ' locked' : ''}` }, main,
-      el('label', { class: 'switch' }, toggle, el('span', { class: 'track' })));
+    // Pack presentation: "apply" mods are a one-tap button; "toggle" mods
+    // lock at the pack's value rather than whatever the game has right now.
+    let control;
+    if (r.ui?.control === 'apply') {
+      control = el('button', { class: 'btn primary apply-btn', text: 'Apply' });
+      control.addEventListener('click', () => send({ type: 'apply', id: r.id, value: r.ui.value }).then(() => toast(`${r.label || r.name}: done.`), () => {}));
+    } else {
+      const toggle = el('input', { type: 'checkbox', role: 'switch', 'aria-label': `${r.label || r.name} on or off` });
+      toggle.checked = r.enabled;
+      toggle.addEventListener('change', async () => {
+        const target = toggle.checked && r.ui?.control === 'toggle' ? r.ui.value : undefined;
+        try {
+          await send({ type: 'toggle', id: r.id, enabled: toggle.checked, target });
+        } catch {
+          toggle.checked = !toggle.checked;
+        }
+      });
+      control = el('label', { class: 'switch' }, toggle, el('span', { class: 'track' }));
+    }
+    const row = el('div', { class: `row${r.enabled ? ' locked' : ''}` }, main, control);
     rows.set(r.id, { row, value, rec: r });
     paintValue(r.id, r);
     list.append(row);
   }
+}
+
+function renderTeleport(tp) {
+  $('teleport').hidden = !tp;
+  if (!tp) return;
+  $('tpList').replaceChildren(...tp.waypoints.map((w) => {
+    const go = el('button', { class: 'btn primary apply-btn', text: 'Go', 'aria-label': `Teleport to ${w.name}` });
+    go.addEventListener('click', async () => {
+      go.disabled = true;
+      try { await send({ type: 'teleport', waypointId: w.id }); toast(`Teleported to ${w.name}.`); } catch { /* toast already shown */ }
+      go.disabled = false;
+    });
+    const main = el('div', { class: 'row-main' }, el('span', { class: 'row-name', text: w.name }));
+    if (w.id === tp.tracked) main.append(el('span', { class: 'row-value', text: 'Tracked' }));
+    return el('div', { class: `row${w.id === tp.tracked ? ' tracked' : ''}` }, main, go);
+  }));
 }
 
 function paintValue(id, v) {

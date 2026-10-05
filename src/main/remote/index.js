@@ -12,7 +12,11 @@ class Remote extends EventEmitter {
   constructor({ controller, settings, webDir, sharedDir }) {
     super();
     this.settings = settings;
-    this.server = new RemoteServer({ controller, webDir, sharedDir, getToken: () => settings.remote.token });
+    this.server = new RemoteServer({
+      controller, webDir, sharedDir,
+      getToken: () => settings.remote.token,
+      getAppearance: () => ({ accent: settings.general?.accent || 'keystone' }),
+    });
     this.server.on('clients', () => this.emit('status'));
     this.error = null;
     this._qrCache = { url: null, dataUrl: null };

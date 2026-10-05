@@ -62,11 +62,15 @@ class CommandsModel {
     const spec = this.spec || {};
     const d = this.game ? this._data() : {};
     const prefixes = spec.console?.prefixes || [''];
+    // Some consoles (Fallout's) have no paste, so paste mode is only offered
+    // where the pack says it works.
+    const pasteSupported = spec.console?.paste !== false;
     return {
       consoleKey: d.consoleKey || spec.console?.key || 'Tab',
       prefix: d.prefix ?? prefixes[0],
       prefixes,
-      mode: d.mode || 'type',
+      mode: pasteSupported ? (d.mode || 'type') : 'type',
+      pasteSupported,
       canEnable: Boolean(spec.console?.enable),
       hasAdminPassword: Boolean(d.adminPassword),
       rconSupported: Boolean(spec.rcon),
@@ -91,6 +95,7 @@ class CommandsModel {
       }
       if (patch.mode !== undefined) {
         if (!['type', 'paste'].includes(patch.mode)) throw new Error('Unknown send mode.');
+        if (patch.mode === 'paste' && spec.console?.paste === false) throw new Error('This game\u2019s console can\u2019t paste. Keystone types commands instead.');
         d.mode = patch.mode;
       }
       if (patch.adminPassword !== undefined) {
@@ -202,6 +207,17 @@ class CommandsModel {
     return this._execute({ via: v, lines: [line], label: 'Typed command' }, [line]);
   }
 
+  // Lines Keystone built itself (teleport), from numbers it already checked.
+  // Console lines get the same admin prefix as the pack's own commands.
+  async runBuilt(lines, via, label, { mode } = {}) {
+    const spec = this._require();
+    const v = via === 'rcon' ? 'rcon' : 'console';
+    if (v === 'console' && !spec.console) throw new Error('This game has no console Keystone can type into.');
+    const prefix = v === 'console' ? this.settings().prefix : '';
+    const out = lines.map((l) => (prefix ? `${prefix} ${l}` : l));
+    return this._execute({ via: v, lines: out, label, mode }, out);
+  }
+
   // Types EnableCheats <password> in the console. Never stored in history.
   async enableAdmin() {
     const spec = this._require();
@@ -223,7 +239,7 @@ class CommandsModel {
         for (const l of lines) outs.push(await client.command(l));
         output = outs.filter(Boolean).join('\n') || null;
       } else {
-        await this._console(lines);
+        await this._console(lines, built.mode);
       }
       this._log({ label: built.label, via: built.via, lines, ok: true, output });
       return { ok: true, via: built.via, lines, output };
@@ -233,11 +249,11 @@ class CommandsModel {
     }
   }
 
-  async _console(lines) {
+  async _console(lines, modeOverride) {
     if (!this.game.pid) throw new Error('Start the game to use console commands. RCON commands work without it.');
     if (!this.consoleSend) throw new Error('Sending to the game console isn’t available here.');
     const s = this.settings();
-    await this.consoleSend(this.game.pid, lines, { consoleKey: s.consoleKey, mode: s.mode });
+    await this.consoleSend(this.game.pid, lines, { consoleKey: s.consoleKey, mode: modeOverride || s.mode, keepsOpen: Boolean(this.spec.console?.keepsOpen) });
   }
 
   // ---------- history ----------

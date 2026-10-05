@@ -47,16 +47,22 @@ const KEYS = {
 const T = { afterFocus: 300, afterConsoleKey: 220, perChar: 6, beforeEnter: 60, afterEnter: 320 };
 
 // ---- pure part: what to press, in order (unit-tested on any OS) ----
-function plan(lines, { consoleKey = 'Tab', mode = 'type' } = {}) {
+// keepsOpen: games differ in what Enter does. ARK closes its console after
+// each command, so every line reopens it. Bethesda games (Fallout) leave it
+// open, so the console opens once, takes every line, then gets closed with
+// the same key; reopening per line would toggle it shut instead.
+function plan(lines, { consoleKey = 'Tab', mode = 'type', keepsOpen = false } = {}) {
   if (!KEYS[consoleKey]) throw new Error(`Unknown console key "${consoleKey}".`);
   const steps = [];
+  const open = () => steps.push({ key: consoleKey }, { wait: T.afterConsoleKey });
+  if (keepsOpen) open();
   for (const line of lines) {
     const text = String(line);
     // Commands are ASCII; anything else (smart quotes pasted from a website)
     // would arrive as gibberish in the console.
     const bad = [...text].find((ch) => ch.charCodeAt(0) > 0x7e || ch.charCodeAt(0) < 0x20);
     if (bad) throw new Error(`The command contains a character the game console can't take: "${bad}".`);
-    steps.push({ key: consoleKey }, { wait: T.afterConsoleKey });
+    if (!keepsOpen) open();
     if (mode === 'paste') {
       steps.push({ clipboard: text }, { chord: ['Ctrl', 'V'] });
     } else {
@@ -64,6 +70,7 @@ function plan(lines, { consoleKey = 'Tab', mode = 'type' } = {}) {
     }
     steps.push({ wait: T.beforeEnter }, { key: 'Enter' }, { wait: T.afterEnter });
   }
+  if (keepsOpen) steps.push({ key: consoleKey }, { wait: T.afterConsoleKey });
   return steps;
 }
 
@@ -154,8 +161,8 @@ async function focus(hwnd) {
 
 // Runs a list of command lines in the game whose process id is `pid`.
 // `clipboard` is { readText, writeText } (Electron's), used by paste mode.
-async function sendToConsole(pid, lines, { consoleKey = 'Tab', mode = 'type', clipboard = null } = {}) {
-  const steps = plan(lines, { consoleKey, mode });
+async function sendToConsole(pid, lines, { consoleKey = 'Tab', mode = 'type', keepsOpen = false, clipboard = null } = {}) {
+  const steps = plan(lines, { consoleKey, mode, keepsOpen });
   const hwnd = findWindow(pid);
   if (!hwnd) throw new Error('Couldn’t find the game’s window. Is the game running and past its loading screen?');
   await focus(hwnd);

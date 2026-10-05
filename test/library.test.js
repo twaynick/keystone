@@ -101,3 +101,20 @@ test('games without a library still get a guides section for your own notes', ()
   assert.deepEqual(info.sections, []);
   assert.equal(c.library.info().guides.length, 0);
 });
+
+test('Fallout 4 library links each item to its exact wiki page', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'keystone-lib-'));
+  const c = new Controller({ packsDir: PACKS, dataDir });
+  cleanups.push(() => c.shutdown());
+  c.attach({ packId: 'fallout-4' });
+  const info = c.library.info();
+  assert.equal(info.sections[0].idLabel, 'Form ID');
+  assert.ok(info.guides.length >= 3);
+  const pistol = c.library.entries('items').find((x) => x.name === '10mm Pistol');
+  const e = c.library.entry('items', pistol.id);
+  assert.equal(e.wikiUrl, 'https://fallout.wiki/wiki/10mm_Pistol_(Fallout_4)');
+  assert.deepEqual(e.commandActions.map((a) => a.id), ['give-item', 'drop-item']);
+  // Entries without a known page get no wiki button rather than a guessed URL.
+  const comp = c.library.entries('items').find((x) => x.category === 'Components');
+  assert.equal(c.library.entry('items', comp.id).wikiUrl, null);
+});

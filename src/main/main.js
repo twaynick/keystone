@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, nativeTheme, shell, protocol, net, safeStorage, clipboard, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeTheme, shell, protocol, net, safeStorage, clipboard, Notification, globalShortcut } = require('electron');
 const { pathToFileURL } = require('url');
 const path = require('path');
 const { Controller } = require('./controller');
@@ -9,6 +9,9 @@ const { Remote } = require('./remote');
 const { OverlayWindow } = require('./overlay-window');
 const { createTray } = require('./tray');
 const { KeystoneBrowser } = require('./browser-window');
+const { ArtCache } = require('./art');
+const { HotkeyRegistry } = require('./hotkeys');
+const { loadPacks } = require('./packs');
 
 const ROOT = path.join(__dirname, '..', '..');
 let controller = null; // created once app paths are ready (needs userData)
@@ -17,6 +20,8 @@ let overlayWin = null;
 let settings = null;
 let tray = null;
 let browser = null;
+let art = null;
+let hotkeyReg = null;
 let quitting = false;
 
 // One Keystone at a time: a second copy would fight the first over the
@@ -47,7 +52,11 @@ app.on('web-contents-created', (_e, contents) => {
 // ksmap:// serves the selected game's map image to the overlay and the
 // Overlay tab. A custom scheme keeps the pages' CSP tight ('self' + ksmap:)
 // instead of opening file:// access to the whole disk.
-protocol.registerSchemesAsPrivileged([{ scheme: 'ksmap', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'ksmap', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  // ksart://cover/<pack id> and ksart://hero/<pack id>: game art (see art.js).
+  { scheme: 'ksart', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
 let mainWindow = null;
 
 function createMainWindow() {
@@ -136,6 +145,7 @@ function send(channel, payload) {
 
 function createController() {
   controller = new Controller({
+    clipboard,
     packsDir: path.join(ROOT, 'packs'),
     dataDir: app.getPath('userData'),
     commands: {
@@ -177,15 +187,54 @@ function createController() {
   controller.on('values', () => send('overlay:live', controller.overlay.values()));
   overlayWin.init();
 
+  // Mod hotkeys: registered while the open game has mods connected, and
+  // re-synced on every change. Each press flashes the result in the overlay.
+  hotkeyReg = new HotkeyRegistry({
+    globalShortcut,
+    onFire: (id) => {
+      try {
+        const r = controller.quickAction(id);
+        overlayWin.flash(`${r.label}: ${r.state}`);
+      } catch (err) {
+        overlayWin.flash(err.message);
+      }
+    },
+  });
+  controller.on('structure', () => hotkeyReg.sync(controller.activeHotkeys()));
+
+  // Auto-attach: pick up games started from Steam, a shortcut, anywhere.
+  if (process.platform === 'win32') {
+    const timer = setInterval(() => {
+      if (!settings.general.autoAttach) return;
+      let res = null;
+      try { res = controller.autoAttachTick(); } catch (err) { send('app:notice', err.message); return; }
+      if (!res) return;
+      send('app:autoAttached', { packId: controller.pack?.id || null, game: res.game, notices: res.notices });
+      overlayWin.flash(`Keystone: ${res.game} detected`);
+    }, 2000);
+    timer.unref?.();
+  }
+
   // Quick links in the browser come from the selected game's pack.
   browser = new KeystoneBrowser({ settings, root: ROOT, getLinks: () => (controller.game ? controller.library.info().links || [] : []) });
   browser.init();
+
+  art = new ArtCache({ dataDir: app.getPath('userData'), fetchImpl: (url) => net.fetch(url) });
+  protocol.handle('ksart', async (req) => {
+    const u = new URL(req.url);
+    const kind = u.hostname;
+    const packId = decodeURIComponent(u.pathname.replace(/^\//, ''));
+    const pack = loadPacks([path.join(ROOT, 'packs'), path.join(app.getPath('userData'), 'packs')]).find((p) => p.id === packId);
+    const file = await art.file(pack, kind);
+    if (!file) return new Response('No art', { status: 404 });
+    return net.fetch(pathToFileURL(file).toString());
+  });
 
   protocol.handle('ksmap', () => {
     // Needs only a selected game, not mods: ASA on a BattlEye server has a
     // map and waypoints but no memory session.
     const m = controller.game ? controller.overlay.map() : null;
-    if (!m) return new Response('No map', { status: 404 });
+    if (!m?.image) return new Response('No map', { status: 404 });
     return net.fetch(pathToFileURL(m.image).toString());
   });
 }
@@ -204,7 +253,7 @@ function handle(channel, fn) {
 }
 
 handle('processes:list', () => controller.listProcesses());
-handle('games:list', () => controller.listGames());
+handle('games:list', () => controller.listGamesWithInstalled());
 handle('session:get', () => controller.snapshot());
 handle('session:attach', (target) => controller.attach(target));
 handle('session:detach', () => controller.detach());
@@ -257,6 +306,16 @@ handle('overlay:addWaypoint', (wp) => ov().addWaypoint(wp));
 handle('overlay:updateWaypoint', (id, patch) => ov().updateWaypoint(id, patch));
 handle('overlay:removeWaypoint', (id) => ov().removeWaypoint(id));
 handle('overlay:setTracked', (id) => ov().setTracked(id));
+handle('overlay:teleport', (target) => ov().teleport(target));
+handle('overlay:setVariant', (id) => ov().setVariant(String(id)));
+handle('overlay:setLayer', (id, on) => ov().setLayer(String(id), on));
+handle('overlay:setHere', (pos) => ov().setHere(pos));
+handle('overlay:clearHere', () => ov().clearHere());
+handle('overlay:findMe', () => ov().findMe());
+handle('overlay:lineUpFindMe', (shown) => ov().lineUpFindMe(shown || {}));
+handle('overlay:resetFindMe', () => ov().resetFindMe());
+// From the overlay's own map: the result shows as a flash in the overlay.
+handle('overlay:teleportTo', (pos) => overlayWin.teleportTo(pos));
 handle('overlay:setReadouts', (ids) => ov().setReadouts(ids));
 handle('overlay:setNotes', (text) => ov().setNotes(text));
 handle('overlay:setPanel', (id, patch) => ov().setPanel(id, patch));
@@ -296,8 +355,52 @@ handle('browser:onTop', (on) => browser.setOnTop(on));
 handle('browser:home', (url) => browser.setHome(url));
 handle('browser:hide', () => browser.hide());
 
+// Games: library, launching, per-game mod switch
+handle('game:launch', async (packId) => {
+  const target = await controller.launchTarget(packId);
+  if (target.kind === 'path') {
+    const err = await shell.openPath(target.path);
+    if (err) throw new Error(`Couldn't start the game: ${err}`);
+  } else if (target.kind === 'appx') {
+    // Xbox app games. Explorer exits with code 1 even when it worked, so its
+    // result says nothing; waitForLaunch below reports a game that never came up.
+    if (!/^[\w.-]+![\w.-]+$/.test(target.id)) throw new Error('That Xbox game has an unexpected app id.');
+    require('child_process').execFile('explorer.exe', [`shell:AppsFolder\\${target.id}`], () => {});
+  } else {
+    await shell.openExternal(target.uri);
+  }
+  // Attach once it's up; the result arrives as a normal structure update.
+  controller.waitForLaunch(packId).then((res) => { if (res?.error) send('app:notice', res.error); else send('app:notice', null); });
+  return true;
+});
+handle('game:modsEnabled', (on) => controller.setModsEnabled(on));
+handle('mod:hotkey', (id, accel) => {
+  const clean = controller.setHotkey(id, accel);
+  if (clean && hotkeyReg.sync(controller.activeHotkeys()).includes(clean)) {
+    controller.setHotkey(id, null);
+    throw new Error(`Another program is already using ${clean}. Pick a different key.`);
+  }
+  return clean;
+});
+handle('mod:pin', (id, on) => controller.setPinned(id, on));
+handle('mod:quick', (id) => controller.quickAction(id));
+
+function broadcastAppearance() {
+  const a = { accent: settings.general.accent };
+  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('app:appearance', a);
+  remote?.server.broadcast({ type: 'appearance', data: a });
+}
+handle('app:appearance', () => ({ accent: settings.general.accent }));
+handle('app:setAccent', (id) => {
+  if (!/^[a-z]{2,20}$/.test(String(id))) throw new Error('Unknown color.');
+  settings.updateGeneral({ accent: id });
+  broadcastAppearance();
+  return appSettings();
+});
+
 handle('app:settings', () => appSettings());
 handle('app:closeToTray', (on) => { settings.updateGeneral({ closeToTray: Boolean(on) }); return appSettings(); });
+handle('app:autoAttach', (on) => { settings.updateGeneral({ autoAttach: Boolean(on) }); return appSettings(); });
 handle('app:startWithWindows', (on) => setStartWithWindows(on));
 handle('app:openFolder', (which) => {
   const dirs = { data: app.getPath('userData'), packs: path.join(app.getPath('userData'), 'packs') };
@@ -327,7 +430,7 @@ app.whenReady().then(() => {
   remote.on('status', () => tray.rebuild());
 });
 
-app.on('before-quit', () => { quitting = true; browser?.shutdown(); });
+app.on('before-quit', () => { quitting = true; browser?.shutdown(); hotkeyReg?.clear(); });
 
 app.on('window-all-closed', async () => {
   overlayWin?.shutdown();

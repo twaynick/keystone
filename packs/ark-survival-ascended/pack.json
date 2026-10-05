@@ -3,6 +3,164 @@
   "exe": [
     "ArkAscended.exe"
   ],
+  "art": {
+    "steamAppId": 2399830
+  },
+  "offlineOnly": true,
+  "offlineNote": "Mods only work in single-player and on servers without BattlEye. Leave them off on BattlEye servers, including your own if BattlEye is on. Commands, the Library and the map work everywhere.",
+  "maps": [
+    {
+      "id": "the-island",
+      "name": "The Island",
+      "units": "latlon",
+      "bounds": {
+        "left": 0,
+        "right": 100,
+        "top": 0,
+        "bottom": 100
+      },
+      "coords": {
+        "lat": {
+          "shift": 50,
+          "div": 6857
+        },
+        "lon": {
+          "shift": 50,
+          "div": 6857
+        }
+      },
+      "markers": "markers/the-island.json"
+    },
+    {
+      "id": "scorched-earth",
+      "name": "Scorched Earth",
+      "units": "latlon",
+      "bounds": {
+        "left": 0,
+        "right": 100,
+        "top": 0,
+        "bottom": 100
+      },
+      "coords": {
+        "lat": {
+          "shift": 50,
+          "div": 8000
+        },
+        "lon": {
+          "shift": 50,
+          "div": 8000
+        }
+      }
+    },
+    {
+      "id": "the-center",
+      "name": "The Center",
+      "units": "latlon",
+      "bounds": {
+        "left": 0,
+        "right": 100,
+        "top": 0,
+        "bottom": 100
+      },
+      "coords": {
+        "lat": {
+          "shift": 30.34,
+          "div": 9584
+        },
+        "lon": {
+          "shift": 55.1,
+          "div": 9600
+        }
+      }
+    },
+    {
+      "id": "aberration",
+      "name": "Aberration",
+      "units": "latlon",
+      "bounds": {
+        "left": 0,
+        "right": 100,
+        "top": 0,
+        "bottom": 100
+      },
+      "coords": {
+        "lat": {
+          "shift": 50,
+          "div": 8000
+        },
+        "lon": {
+          "shift": 50,
+          "div": 8000
+        }
+      }
+    },
+    {
+      "id": "extinction",
+      "name": "Extinction",
+      "units": "latlon",
+      "bounds": {
+        "left": 0,
+        "right": 100,
+        "top": 0,
+        "bottom": 100
+      },
+      "coords": {
+        "lat": {
+          "shift": 50,
+          "div": 8000
+        },
+        "lon": {
+          "shift": 50,
+          "div": 8000
+        }
+      }
+    },
+    {
+      "id": "ragnarok",
+      "name": "Ragnarok",
+      "units": "latlon",
+      "bounds": {
+        "left": 0,
+        "right": 100,
+        "top": 0,
+        "bottom": 100
+      },
+      "coords": {
+        "lat": {
+          "shift": 50,
+          "div": 13100
+        },
+        "lon": {
+          "shift": 50,
+          "div": 13100
+        }
+      }
+    },
+    {
+      "id": "valguero",
+      "name": "Valguero",
+      "units": "latlon",
+      "bounds": {
+        "left": 0,
+        "right": 100,
+        "top": 0,
+        "bottom": 100
+      },
+      "coords": {
+        "lat": {
+          "shift": 50,
+          "div": 8160
+        },
+        "lon": {
+          "shift": 50,
+          "div": 8160
+        }
+      }
+    }
+  ],
+  "findMe": {
+    "command": "ccc"
+  },
   "info": [
     {
       "title": "Commands on your server",
@@ -18,12 +176,14 @@
       {
         "id": "creatures",
         "label": "Creatures",
-        "catalog": "creatures"
+        "catalog": "creatures",
+        "idLabel": "Creature ID"
       },
       {
         "id": "items",
         "label": "Items",
-        "catalog": "items"
+        "catalog": "items",
+        "idLabel": "Class name"
       }
     ],
     "guides": "guides",

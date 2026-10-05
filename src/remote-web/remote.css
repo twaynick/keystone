@@ -79,3 +79,8 @@ body {
   background: var(--raised); border: 1px solid var(--line-strong);
 }
 .toast.error { border-color: var(--danger); }
+.apply-btn { height: 40px; padding: 0 20px; }
+
+/* Teleport list, under the mods. */
+.tp-head { margin: 0; padding: 20px 18px 10px; font: 600 16px var(--font-display); color: var(--text); }
+.row.tracked .row-value { color: var(--accent); }
