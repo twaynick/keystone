@@ -280,8 +280,12 @@ class OverlayModel {
     if (!conv) throw new Error(`Find me doesn’t know ${this.variant().name}’s coordinates.`);
     const clip = this.c.clipboard;
     if (!clip) throw new Error('Find me needs the clipboard, which isn’t available here.');
-    const saved = clip.readText();
-    clip.writeText('');
+    // Electron's clipboard.readText() returns a Promise in newer versions
+    // (a plain string in older ones), so every read is awaited, and only a
+    // string is ever written back.
+    const read = async () => { const t = await clip.readText(); return typeof t === 'string' ? t : ''; };
+    const saved = await read();
+    await clip.writeText('');
     let raw = null;
     try {
       // Typed, never pasted: paste mode puts the old clipboard back after
@@ -290,10 +294,10 @@ class OverlayModel {
       const until = Date.now() + timeoutMs;
       while (!raw && Date.now() < until) {
         await new Promise((r) => setTimeout(r, pollMs));
-        raw = parseCoords(clip.readText());
+        raw = parseCoords(await read());
       }
     } finally {
-      clip.writeText(saved);
+      await clip.writeText(saved);
     }
     if (!raw) throw new Error('The game didn’t copy a position. Check you’re logged in as admin (the command needs cheat access), then try again.');
     const pos = ueToMap(raw, conv);

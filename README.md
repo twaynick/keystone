@@ -347,6 +347,9 @@ scripts/capture.js   dev helper: launch, run a snippet, save a screenshot
 
 ## Changelog
 
+### 0.34.1
+- Fixed: **Find me** (and pasting commands) failed with "Error processing argument at index 0, conversion failure from". The Electron version Keystone runs on now reads the clipboard asynchronously, so Keystone was trying to put back a pending read instead of your clipboard text. Clipboard reads are awaited now, in both places.
+
 ### 0.34.0
 - **What works, on every installed table**: store cards and the install message say how many mods and scripts run in Keystone and how many need Cheat Engine. Tables are marked **Partly works** or **Needs Cheat Engine** when that applies.
 - **Open in Cheat Engine**: for those tables, a button on the card (and a link under the Mods tab's mods list) opens the table in Cheat Engine, when it's installed.

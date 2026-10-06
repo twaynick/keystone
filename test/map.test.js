@@ -14,10 +14,13 @@ const PACKS = path.join(__dirname, '..', 'packs');
 const tmpDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'keystone-map-'));
 
 // A fake game: typing "admincheat ccc" makes it copy its position, like ARK.
-function ark({ pos = { x: 120000, y: -96000, z: 3500 }, copies = true } = {}) {
+function ark({ pos = { x: 120000, y: -96000, z: 3500 }, copies = true, asyncClipboard = false } = {}) {
   let clip = 'my own clipboard text';
   const typed = [];
-  const clipboard = { readText: () => clip, writeText: (t) => { clip = t; } };
+  // Electron 44's clipboard.readText() returns a Promise; older ones a string.
+  const clipboard = asyncClipboard
+    ? { readText: async () => clip, writeText: (t) => { if (typeof t !== 'string') throw new Error('Error processing argument at index 0, conversion failure from '); clip = t; } }
+    : { readText: () => clip, writeText: (t) => { clip = t; } };
   const consoleSend = async (pid, lines, opts) => {
     typed.push({ lines, mode: opts.mode });
     if (copies && lines.some((l) => /\bccc$/.test(l))) setTimeout(() => { clip = `${pos.x} ${pos.y} ${pos.z} 12.5 -3.0`; }, 30);
@@ -181,4 +184,11 @@ test('marker files are read from the pack folder only, and bad points are droppe
   assert.equal(p.maps[0].markers.layers.length, 1);
   assert.deepEqual([layer.color, layer.shape, layer.points.length], ['#ffffff', 'circle', 1]);
   assert.equal(p.maps[1].markers.layers.length, 0);
+});
+
+test('Find me works with an async clipboard (Electron 44) and puts the old text back', async () => {
+  const { c, clip } = ark({ asyncClipboard: true });
+  const h = await c.overlay.findMe({ pollMs: 10 });
+  assert.ok(Number.isFinite(h.x) && Number.isFinite(h.y));
+  assert.equal(clip(), 'my own clipboard text');
 });

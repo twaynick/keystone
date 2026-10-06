@@ -166,13 +166,15 @@ async function sendToConsole(pid, lines, { consoleKey = 'Tab', mode = 'type', ke
   const hwnd = findWindow(pid);
   if (!hwnd) throw new Error('Couldn’t find the game’s window. Is the game running and past its loading screen?');
   await focus(hwnd);
-  const saved = mode === 'paste' && clipboard ? clipboard.readText() : null;
+  // readText() is a Promise in newer Electron versions; await works for both.
+  let saved = mode === 'paste' && clipboard ? await clipboard.readText() : null;
+  if (saved !== null && typeof saved !== 'string') saved = '';
   try {
     for (const s of steps) {
       if (s.wait) await sleep(s.wait);
       else if (s.key) send([keyInput(s.key, false), keyInput(s.key, true)]);
       else if (s.chord) send([...s.chord.map((n) => keyInput(n, false)), ...s.chord.slice().reverse().map((n) => keyInput(n, true))]);
-      else if (s.clipboard !== undefined) { clipboard.writeText(s.clipboard); await sleep(30); }
+      else if (s.clipboard !== undefined) { await clipboard.writeText(s.clipboard); await sleep(30); }
       else if (s.text) {
         for (const ch of s.text) {
           send(charInputs(ch));
@@ -182,7 +184,7 @@ async function sendToConsole(pid, lines, { consoleKey = 'Tab', mode = 'type', ke
     }
   } finally {
     // Put back whatever was on the clipboard before paste mode borrowed it.
-    if (saved !== null) clipboard.writeText(saved);
+    if (saved !== null) await clipboard.writeText(saved);
   }
 }
 

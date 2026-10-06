@@ -1,6 +1,6 @@
 {
   "name": "keystone",
-  "version": "0.34.0",
+  "version": "0.34.1",
   "description": "Mod control panel for single-player PC games: Cheat Engine tables as toggles, phone remote, in-game overlay.",
   "main": "src/main/main.js",
   "scripts": {
