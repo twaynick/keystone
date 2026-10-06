@@ -7,6 +7,8 @@
     "steamAppId": 2399830
   },
   "offlineOnly": true,
+  "privateServers": true,
+  "antiCheat": { "name": "BattlEye", "processes": ["BEService.exe", "BEService_x64.exe"] },
   "offlineNote": "Mods only work in single-player and on servers without BattlEye. Leave them off on BattlEye servers, including your own if BattlEye is on. Commands, the Library and the map work everywhere.",
   "maps": [
     {

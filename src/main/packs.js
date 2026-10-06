@@ -22,6 +22,8 @@ const path = require('path');
 //     "art": { "steamAppId": 377160 } or { "cover": "cover.png", "hero": "hero.png" },
 //     "launch": { "steamAppId": 377160 } or { "uri": "com.epicgames.launcher://apps/..." },
 //     "offlineOnly": true, "offlineNote": "...", "memory": false,
+//     "antiCheat": { "name": "BattlEye", "processes": ["BEService.exe"] },
+//     "privateServers": true,             // offers private-server mode (needs antiCheat)
 //     "modsUi": { "Player/Health": { "control": "slider", "min": 0, "max": 100 } },
 //     "teleport": { "lift": 200, "holdMs": 300 }            // tuning for memory teleports
 //              or { "command": ["SetPlayerPos {x} {y} {z}"], "via": "console" },
@@ -86,6 +88,12 @@ function normalize(raw, folder, id) {
     memory: raw.memory !== false,
     offlineOnly: Boolean(raw.offlineOnly),
     offlineNote: raw.offlineNote ? String(raw.offlineNote) : null,
+    // The game's anti-cheat, by process name: while one runs, Keystone never
+    // opens the game, whatever else is switched on.
+    antiCheat: antiCheatOf(raw.antiCheat),
+    // Private-server mode: mods for one run of the game on a server the
+    // player runs, only with the anti-cheat confirmed not running.
+    privateServers: Boolean(raw.privateServers) && Boolean(antiCheatOf(raw.antiCheat)),
     // Presentation for known mods, keyed by "Group/Name" as in the table:
     // { label, control: toggle|slider|steps|apply, value, min, max, step, values }
     modsUi: raw.modsUi && typeof raw.modsUi === 'object' ? raw.modsUi : {},
@@ -105,6 +113,12 @@ function normalize(raw, folder, id) {
       .filter((l) => l && l.name && Array.isArray(l.items))
       .map((l) => ({ name: String(l.name).slice(0, 40), items: l.items.filter((i) => typeof i === 'string' && i.trim()).map((i) => i.trim().slice(0, 80)) })),
   };
+}
+
+function antiCheatOf(ac) {
+  if (!ac || typeof ac !== 'object') return null;
+  const processes = (Array.isArray(ac.processes) ? ac.processes : []).filter((p) => typeof p === 'string' && /\.exe$/i.test(p.trim())).map((p) => p.trim());
+  return processes.length ? { name: String(ac.name || 'Anti-cheat').slice(0, 40), processes } : null;
 }
 
 // Map variants. Games with several worlds (ARK's maps) list them in "maps";

@@ -377,3 +377,33 @@ test('fetcher: checks wait out a browser check, and report updates', async () =>
   assert.equal(destroyed, 1);
   assert.equal(store.status('fo4'), 'update');
 });
+
+// ---------- what works ----------
+const { summarizeTable, describeSummary } = require('../src/main/table-store');
+
+test('store: says how much of a table runs in Keystone', () => {
+  const entry = (id, inner) => `<CheatEntry><ID>${id}</ID><Description>"E${id}"</Description>${inner}</CheatEntry>`;
+  const aa = (body) => `<VariableType>Auto Assembler Script</VariableType><AssemblerScript>${body}</AssemblerScript>`;
+  const ct = `<CheatTable><CheatEntries>
+    ${entry(1, '<VariableType>4 Bytes</VariableType><Address>game.exe+10</Address>')}
+    ${entry(2, '<VariableType>Float</VariableType><Address>game.exe+14</Address>')}
+    ${entry(3, aa('[ENABLE]\ngame.exe+100:\nnop 2\n[DISABLE]\n'))}
+    ${entry(4, aa('{$lua}\n[ENABLE]\nLaunchMonoDataCollector()\n[DISABLE]\n'))}
+    ${entry(5, aa('[ENABLE]\ncreatethread(x)\n[DISABLE]\n'))}
+    ${entry(6, '<VariableType>String</VariableType><Address>game.exe+20</Address>')}
+  </CheatEntries><LuaScript>print(1)</LuaScript></CheatTable>`;
+  const s = summarizeTable(ct);
+  assert.deepEqual(s, { mods: 2, scripts: 1, needsCE: 2, types: 1, luaStartup: true });
+  assert.equal(describeSummary(s), '2 mods and 1 script work in Keystone; 3 need Cheat Engine.');
+  assert.equal(describeSummary({ mods: 0, scripts: 0, needsCE: 0, types: 0, luaStartup: true }), 'It makes its mods with Lua when it opens.');
+
+  const { store, file, tablesDir } = setup([FO4]);
+  const res = store.install('fo4', { file: file('a', ct), fileName: 'FO4.CT' });
+  assert.deepEqual(res.summary, s);
+  assert.deepEqual(store.list().tables[0].installed.summary, s);
+  assert.deepEqual(store.files('fo4'), [path.join(tablesDir, 'fallout-4', 'FO4.CT')]);
+  // An install from before summaries existed gets one when listed.
+  delete store.data.installed.fo4.summary;
+  assert.deepEqual(store.list().tables[0].installed.summary, s);
+  assert.throws(() => store.files('nope'), /isn’t installed/);
+});

@@ -4,6 +4,7 @@ const { EventEmitter } = require('events');
 const address = require('./address');
 const values = require('./values');
 const { ScriptRunner } = require('./autoasm');
+const { LuaHost } = require('./lua');
 
 // One attached game: its memory backend, the loaded mod records, and the
 // per-record state (frozen or not, target value, last read value).
@@ -12,6 +13,7 @@ const { ScriptRunner } = require('./autoasm');
 //   'structure' – records or toggles changed (send a full snapshot)
 //   'values'    – current values refreshed (send live readouts)
 //   'detached'  – the game exited
+//   'notice'    – a message from a table's Lua (showMessage, a timer that stopped)
 //
 // Two loops run while attached:
 //   freeze loop (50 ms)  – rewrites every enabled record's target value. Games
@@ -26,6 +28,9 @@ class Session extends EventEmitter {
     this.memory = memory;
     this.processName = processName;
     this.pid = pid;
+    // Tells one run of the game from the next (the pointer finder's
+    // "check after a restart" needs to know it's a new run).
+    this.runId = require('crypto').randomUUID();
     this.freezeMs = freezeMs;
     this.readMs = readMs;
     this.records = [];
@@ -34,7 +39,21 @@ class Session extends EventEmitter {
     this._timers = [];
     // Names Cheat Engine scripts register, which other mods' addresses use.
     this.symbols = new Map();
-    this.scripts = new ScriptRunner(memory, this.symbols);
+    // One Lua state per game, shared by all its tables (as in Cheat
+    // Engine): a table's startup script defines functions its mods use.
+    this._lua = null;
+    this.scripts = new ScriptRunner(memory, this.symbols, { lua: () => this.lua() });
+  }
+
+  lua() {
+    if (!this._lua) this._lua = new LuaHost(this);
+    return this._lua;
+  }
+
+  // A table's own Lua script (<LuaScript>), run when the table loads.
+  runTableScript(code, tableName) {
+    this.lua().resetMade(`ct:${tableName}`);
+    return this.lua().run(code, { name: tableName, table: `ct:${tableName}` });
   }
 
   get gameKey() {
@@ -59,6 +78,8 @@ class Session extends EventEmitter {
     // nothing managing it any more (Keystone closing, switching games)
     // could crash it later, e.g. a jump into a code cave that gets freed.
     try { if (this.memory.isAlive()) this.disableScripts(); } catch { /* game gone */ }
+    // After the scripts: their [DISABLE] sections may need Lua.
+    this._lua?.close();
     try { this.memory.close(); } catch { /* already gone */ }
   }
 
@@ -66,27 +87,82 @@ class Session extends EventEmitter {
   disableScripts() {
     const on = this.records.filter((r) => r.kind === 'script' && this.state.get(r.id)?.enabled).reverse();
     for (const r of on) {
-      try { this.scripts.run(r.id, r.script, 'disable'); } catch { /* keep going */ }
+      try { this.scripts.run(r.id, r.script, 'disable', { name: r.name }); } catch { /* keep going */ }
       this.state.get(r.id).enabled = false;
     }
   }
 
   // Adds a table's records. Re-loading the same table replaces its old records
   // (by id prefix) instead of duplicating them.
-  addRecords(records, tableName) {
-    const prefix = records[0]?.id.split(':').slice(0, 2).join(':');
+  addRecords(records, tableName, prefix = records[0]?.id.split(':').slice(0, 2).join(':')) {
     if (prefix) {
       this.records = this.records.filter((r) => !r.id.startsWith(prefix + ':'));
       for (const id of [...this.state.keys()]) if (id.startsWith(prefix + ':')) this.state.delete(id);
     }
     this.records.push(...records);
-    for (const r of records) {
-      if (r.kind === 'value') this.state.set(r.id, { enabled: false, target: null, current: null, status: 'pending', error: null });
-      if (r.kind === 'script') this.state.set(r.id, { enabled: false, target: null, current: null, status: null, error: null });
-    }
+    for (const r of records) this._initState(r);
     if (tableName && !this.tables.includes(tableName)) this.tables.push(tableName);
     this.readTick();
     this.emit('structure');
+  }
+
+  _initState(r) {
+    this.state.delete(r.id);
+    if (r.kind === 'value') this.state.set(r.id, { enabled: false, target: null, current: null, status: 'pending', error: null });
+    if (r.kind === 'script') this.state.set(r.id, { enabled: false, target: null, current: null, status: null, error: null });
+  }
+
+  // Adds or replaces one record (mods a table's Lua makes). A new one goes
+  // after the last record nested under 'after', or at the end. The caller
+  // emits 'structure' once it's done changing records.
+  putRecord(rec, { after = null } = {}) {
+    const i = this.records.findIndex((r) => r.id === rec.id);
+    if (i >= 0) {
+      const old = this.records[i];
+      this.records[i] = rec;
+      // Same kind keeps its switch and value; a value that became a script
+      // (or the reverse) starts fresh.
+      if (old.kind !== rec.kind || !this.state.has(rec.id)) this._initState(rec);
+      return;
+    }
+    let at = this.records.length;
+    const p = after ? this.records.findIndex((r) => r.id === after) : -1;
+    if (p >= 0) {
+      at = p + 1;
+      while (at < this.records.length && this.records[at].depth > this.records[p].depth) at++;
+    }
+    this.records.splice(at, 0, rec);
+    this._initState(rec);
+  }
+
+  // Moves a record (and what's nested under it) to sit under another.
+  moveRecord(id, parentId) {
+    const i = this.records.findIndex((r) => r.id === id);
+    if (i < 0) return;
+    let end = i + 1;
+    while (end < this.records.length && this.records[end].depth > this.records[i].depth) end++;
+    const block = this.records.splice(i, end - i);
+    const p = this.records.findIndex((r) => r.id === parentId);
+    let at = this.records.length;
+    if (p >= 0) {
+      at = p + 1;
+      while (at < this.records.length && this.records[at].depth > this.records[p].depth) at++;
+    }
+    this.records.splice(at, 0, ...block);
+  }
+
+  removeRecord(id) {
+    const i = this.records.findIndex((r) => r.id === id);
+    if (i < 0) return;
+    let end = i + 1;
+    while (end < this.records.length && this.records[end].depth > this.records[i].depth) end++;
+    for (const r of this.records.slice(i, end).reverse()) {
+      if (r.kind === 'script' && this.state.get(r.id)?.enabled) {
+        try { this.scripts.run(r.id, r.script, 'disable', { name: r.name }); } catch { /* keep going */ }
+      }
+      this.state.delete(r.id);
+    }
+    this.records.splice(i, end - i);
   }
 
   getRecord(id) {
@@ -117,7 +193,7 @@ class Session extends EventEmitter {
     const on = Boolean(enabled);
     if (st.enabled === on) return;
     try {
-      this.scripts.run(id, rec.script, on ? 'enable' : 'disable');
+      this.scripts.run(id, rec.script, on ? 'enable' : 'disable', { name: rec.name });
       st.enabled = on;
       st.status = 'ok';
       st.error = null;

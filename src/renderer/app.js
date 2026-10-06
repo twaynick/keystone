@@ -294,9 +294,10 @@ function renderModsPane(snap) {
   banner.hidden = !snap.offlineOnly;
   if (snap.offlineOnly) {
     $('offlineText').textContent = snap.offlineNote || 'Mods only work in offline or solo play. Turn them off before you go online.';
-    const on = snap.modsBlocked !== 'offline-off';
+    const on = snap.modsSwitch;
     for (const b of $('modsSwitch').querySelectorAll('button')) b.setAttribute('aria-pressed', String((b.dataset.v === 'on') === on));
   }
+  renderPrivateRow(snap);
   // The value finder replaces the "no mods yet" message while it's open.
   const finderOpen = Boolean(snap.mods && state.finder.open);
   $('finderPanel').hidden = !finderOpen;
@@ -304,16 +305,48 @@ function renderModsPane(snap) {
   $('emptyNoMods').hidden = snap.mods;
   if (!snap.mods) {
     const offline = snap.game.offline;
-    $('noModsTitle').textContent = snap.modsBlocked === 'offline-off' ? 'Mods are off for this game'
-      : offline ? 'Start the game to use mods' : 'Mods aren’t available right now';
-    $('noModsText').textContent = snap.modsBlocked === 'offline-off'
-      ? 'Turn on "Use mods in this game" above when you’re playing offline or solo.'
+    $('noModsTitle').textContent = snap.modsBlocked === 'anticheat' ? `${snap.antiCheat} is running`
+      : snap.modsBlocked === 'offline-off' ? 'Mods are off for this game'
+        : offline ? 'Start the game to use mods' : 'Mods aren’t available right now';
+    $('noModsText').textContent = snap.modsBlocked === 'anticheat'
+      ? `Keystone doesn’t touch the game while ${snap.antiCheat} runs, even with mods switched on. Commands, the Library and the map still work.`
+      : snap.modsBlocked === 'offline-off'
+        ? (snap.privateServers ? 'Turn on "Use mods in this game" above when you’re playing offline or solo, or use mods for this session on your own server.' : 'Turn on "Use mods in this game" above when you’re playing offline or solo.')
       : offline ? (snap.canLaunch ? 'Press Play and Keystone connects to the game as soon as it starts.' : 'Start the game and Keystone picks it up.')
         : `Keystone can't reach this game's memory (${snap.modsError || 'access denied'}). That's normal for games with anti-cheat.`;
     $('noModsCommands').hidden = !snap.hasCommands;
   }
   $('modsView').hidden = !hasMods;
   if (hasMods) { renderMods(); renderProfiles(); renderTableCredits(snap.autoTables || []); }
+}
+
+// Private-server mode: mods for one run of the game on a server you run.
+function renderPrivateRow(snap) {
+  const row = $('privateRow');
+  row.hidden = !snap.privateServers;
+  if (row.hidden) return;
+  const ac = snap.antiCheat || 'Anti-cheat';
+  const btn = $('privateBtn');
+  $('privateBadge').hidden = !snap.privateServer;
+  btn.hidden = false;
+  btn.disabled = false;
+  if (snap.modsBlocked === 'anticheat') {
+    $('privateText').textContent = `${ac} is running, so Keystone stays away from the game until it closes.`;
+    btn.hidden = true;
+  } else if (snap.privateServer) {
+    $('privateText').textContent = 'Mods are on for this session, until the game closes.';
+    btn.textContent = 'End';
+  } else if (snap.modsSwitch) {
+    btn.hidden = true;
+    $('privateText').textContent = '';
+    row.hidden = true;
+  } else {
+    $('privateText').textContent = snap.game.offline
+      ? `On a server you run, with ${ac} off? Start the game, then turn mods on for that session only.`
+      : `On a server you run, with ${ac} off? Turn mods on for this session only.`;
+    btn.textContent = 'Use mods this session';
+    btn.disabled = snap.game.offline;
+  }
 }
 
 // "Tables: Fallout 4 by Someone (link) · My table (yours)" under the mods.
@@ -338,6 +371,13 @@ function renderTableCredits(list) {
       parts.push(document.createTextNode(' ('), a, document.createTextNode(')'));
     }
     if (t.source === 'mine') parts.push(document.createTextNode(' (your tables folder)'));
+    // Mods Keystone can't run from this table: offer Cheat Engine for them.
+    const missing = state.snapshot.records.filter((r) => r.kind === 'unsupported' && r.id.startsWith(`ct:${t.name}:`)).length;
+    if (missing) {
+      const a = el('a', { text: `open in Cheat Engine for the ${missing} that need${missing === 1 ? 's' : ''} it`, title: 'Opens the table with Cheat Engine, if it’s installed' });
+      a.addEventListener('click', () => call(keystone.openLoadedInCE(i)));
+      parts.push(document.createTextNode(' ('), a, document.createTextNode(')'));
+    }
   });
   p.replaceChildren(document.createTextNode('Tables: '), ...parts);
 }
@@ -397,10 +437,15 @@ function paintFinder(i) {
   $('fUndo').disabled = i.busy || !i.canUndo;
 
   const st = $('fStatus');
-  st.hidden = !i.busy && !started;
-  st.className = `finder-status${i.busy ? '' : ' idle'}`;
-  $('fCancel').hidden = !i.busy;
-  if (i.busy) {
+  st.hidden = !i.busy && !started && !i.pointer;
+  st.className = `finder-status${i.busy || i.pointer ? '' : ' idle'}`;
+  $('fCancel').hidden = !i.busy && !i.pointer;
+  if (i.pointer) {
+    const p = i.pointer.progress;
+    const pct = p && p.total ? Math.min(100, Math.round((p.done / p.total) * 100)) : 0;
+    $('fBar').style.width = `${pct}%`;
+    $('fStatusText').textContent = `Finding a lasting address for “${i.pointer.name}”… ${p ? `step ${p.level} of ${p.maxDepth}, ` : ''}${pct}%`;
+  } else if (i.busy) {
     const p = i.progress;
     const pct = p && p.total ? Math.min(100, Math.round((p.done / p.total) * 100)) : 0;
     $('fBar').style.width = `${pct}%`;
@@ -467,11 +512,29 @@ function startAdd(cell, r, type) {
   input.focus();
 }
 
+// "[[demo.exe+2200]+8]+1C" for a pointer path, the way Cheat Engine shows it.
+function pathText(m) {
+  let t = m.address;
+  for (const o of m.offsets || []) {
+    const n = BigInt(o);
+    t = `[${t}]${n < 0n ? '-' : '+'}${(n < 0n ? -n : n).toString(16).toUpperCase()}`;
+  }
+  return t;
+}
+
+function myModTag(m) {
+  if (!m.kept) return el('span', { class: 'tag temp', text: 'Until the game closes' });
+  if (m.pointer?.canCheck) return el('span', { class: 'tag check', text: `${m.pointer.paths} paths · check now` });
+  if (m.pointer?.waiting) return el('span', { class: 'tag keep', text: `Saved · ${m.pointer.paths} paths, check after a restart` });
+  return el('span', { class: 'tag keep', text: 'Saved' });
+}
+
 function paintMyMods(mods) {
   $('fMine').hidden = !mods.length;
   $('fShare').disabled = !mods.some((m) => m.kept);
   const box = $('fMineList');
-  if (box.contains(document.activeElement)) return; // mid-rename
+  if (box.contains(document.activeElement)) return; // mid-rename or mid-check
+  const searching = Boolean(state.finder.info?.pointer);
   const table = el('table', { class: 'finder-table' });
   for (const m of mods) {
     const act = el('td', { class: 'act' });
@@ -490,10 +553,42 @@ function paintMyMods(mods) {
       if (!window.confirm(`Delete “${m.name}”?`)) return;
       if (await call(keystone.finderRemoveMod(m.id)) !== undefined) refreshFinder();
     });
+    if (!m.kept) {
+      const last = el('button', { class: 'btn small primary', text: 'Make it last', title: 'Find a way to this value that survives restarting the game', disabled: searching });
+      last.addEventListener('click', async () => {
+        const r = await call(keystone.finderMakeLast(m.id));
+        if (!r || r.cancelled) return;
+        toast(r.paths > 1
+          ? `Saved “${m.name}” with ${r.paths} possible paths. Restart the game, then come back and press Check to keep the right one.`
+          : `Saved “${m.name}”. It comes back every time you open the game.`);
+        refreshFinder();
+      });
+      act.append(last);
+    }
+    if (m.pointer?.canCheck) {
+      const check = el('button', { class: 'btn small primary', text: 'Check' });
+      check.addEventListener('click', () => {
+        const input = el('input', { class: 'field', placeholder: `${m.name} in game now`, inputmode: 'decimal', autocomplete: 'off' });
+        const ok = el('button', { class: 'btn small primary', text: 'Check' });
+        const go = async () => {
+          const r = await call(keystone.finderCheck(m.id, input.value));
+          if (!r) return;
+          toast(r.paths === 1 ? `Found the right path for “${m.name}”. It comes back every time you open the game.`
+            : `${r.paths} paths still lead to it (${r.dropped} dropped). Check again after the next restart to narrow it down.`);
+          input.blur();
+          refreshFinder();
+        };
+        ok.addEventListener('click', go);
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+        act.replaceChildren(input, ok);
+        input.focus();
+      });
+      act.append(check);
+    }
     act.append(rename, del);
     table.append(el('tr', {},
       el('td', { text: m.name }),
-      el('td', { class: 'mono where', text: m.address }, el('span', { class: `tag ${m.kept ? 'keep' : 'temp'}`, text: m.kept ? 'Saved' : 'Until the game closes' })),
+      el('td', { class: 'mono where', text: pathText(m) }, myModTag(m)),
       act));
   }
   box.replaceChildren(table);
@@ -538,7 +633,7 @@ function wireFinder() {
     refreshFinder();
     $('fVal').focus();
   });
-  $('fCancel').addEventListener('click', () => call(keystone.finderCancel()));
+  $('fCancel').addEventListener('click', () => call(state.finder.info?.pointer ? keystone.finderCancelPointer() : keystone.finderCancel()));
   $('fShare').addEventListener('click', async () => {
     const r = await call(keystone.finderExport());
     if (r) toast(`Saved ${r.count} mod${r.count === 1 ? '' : 's'} to ${r.file.split(/[\\/]/).pop()}.`);
@@ -2406,14 +2501,30 @@ function storeStatusLine(t) {
   return i.lastChecked ? `Up to date · checked ${agoText(i.lastChecked)}` : `Installed ${agoText(i.at)}`;
 }
 
+// "40 mods · 12 scripts · 5 need Cheat Engine", from the installed file.
+function worksText(s) {
+  const bits = [];
+  if (s.mods) bits.push(`${s.mods} mod${s.mods === 1 ? '' : 's'}`);
+  if (s.scripts) bits.push(`${s.scripts} script${s.scripts === 1 ? '' : 's'}`);
+  if (!bits.length && s.luaStartup) bits.push('Makes its mods with Lua');
+  const missing = s.needsCE + s.types;
+  if (missing) bits.push(`${missing} need${missing === 1 ? 's' : ''} Cheat Engine`);
+  return bits.join(' · ') || 'Nothing Keystone can run';
+}
+
 function storeCard(t) {
   const art = el('div', { class: 'tile-art' });
   const initials = el('span', { class: 'initials', text: t.game });
   initials.hidden = true;
   art.append(initials, artImg(t.packId, 'cover', () => { initials.hidden = false; }));
   const flags = el('div', { class: 'tile-flags' });
+  const sum = t.installed?.summary;
+  const missing = sum ? sum.needsCE + sum.types : 0;
+  const works = sum ? sum.mods + sum.scripts : 0;
   if (t.status === 'update') flags.append(el('span', { class: 'badge accent', text: 'Update' }));
   else if (t.status === 'installed') flags.append(el('span', { class: 'badge ok', text: 'Installed' }));
+  if (sum && missing && works) flags.append(el('span', { class: 'badge warn', text: 'Partly works' }));
+  else if (sum && missing && !sum.luaStartup) flags.append(el('span', { class: 'badge warn', text: 'Needs Cheat Engine' }));
   if (t.offlineOnly) flags.append(el('span', { class: 'badge warn', text: 'Offline only' }));
   art.append(flags);
 
@@ -2427,6 +2538,14 @@ function storeCard(t) {
   const label = t.status === 'update' ? 'Get update' : t.status === 'installed' ? 'Open page' : 'Get';
   const actions = el('div', { class: 'store-actions' },
     el('button', { class: `btn small${t.status === 'installed' ? '' : ' primary'}`, text: label, onclick: open }));
+  if (t.installed && missing) {
+    actions.append(el('button', {
+      class: 'btn small ghost',
+      text: 'Cheat Engine',
+      title: 'Open this table in Cheat Engine, for the parts Keystone can’t run',
+      onclick: () => call(keystone.storeOpenInCE(t.id)),
+    }));
+  }
   if (t.installed) {
     actions.append(el('button', {
       class: 'btn small ghost',
@@ -2439,6 +2558,7 @@ function storeCard(t) {
     }));
   }
   return el('div', { class: `store-card${t.status === 'update' ? ' has-update' : ''}` }, tile,
+    sum ? el('p', { class: `store-works${missing ? ' partly' : ''}`, text: worksText(sum) }) : null,
     el('p', { class: 'store-status', text: storeStatusLine(t) }), actions);
 }
 
@@ -2582,9 +2702,18 @@ function wire() {
     if (!b) return;
     const on = b.dataset.v === 'on';
     const snap = state.snapshot;
-    if (on === (snap.modsBlocked !== 'offline-off')) return;
+    if (on === snap.modsSwitch) return;
     if (on && !(await confirmBox(`${snap.offlineNote || 'Mods only work offline.'}\n\nOnly turn mods on when you’re playing offline or solo. Using them online can get your account banned.`, 'Turn mods on'))) return;
     const res = await call(keystone.setModsEnabled(on));
+    if (res) { state.snapshot = res.snapshot; render(); for (const n of res.notices) toast(n); }
+  });
+
+  $('privateBtn').addEventListener('click', async () => {
+    const snap = state.snapshot;
+    const ac = snap.antiCheat || 'the anti-cheat';
+    const start = !snap.privateServer;
+    if (start && !(await confirmBox(`Only for a server you run (or one whose owner allows mods) with ${ac} turned off.\n\nKeystone checks ${ac} isn’t running, turns mods on until the game closes, and lets go of the game at once if ${ac} starts. Mods change your game only: things the server keeps track of won’t change.`, 'Use mods this session'))) return;
+    const res = await call(keystone.setPrivateServer(start));
     if (res) { state.snapshot = res.snapshot; render(); for (const n of res.notices) toast(n); }
   });
 
@@ -2624,6 +2753,8 @@ function wire() {
     }
   });
   keystone.onDetached(({ name }) => toast(`${name.replace(/\.exe$/i, '')} closed.`));
+  // Messages from a table's Lua (showMessage, a timer that stopped).
+  keystone.onSessionNotice((text) => toast(text));
   // A game started outside Keystone was picked up. From the library, go to
   // its page; anywhere else (Settings, the phone screen) just say so.
   keystone.onAutoAttached(({ game, notices }) => {

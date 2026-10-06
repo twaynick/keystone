@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { EventEmitter } = require('events');
-const { parseCheatTable } = require('./engine/ct-parser');
+const { parseCheatTable, tableLuaScript } = require('./engine/ct-parser');
 
 // The Tables tab: a catalog of links to community cheat tables on their
 // creators' own pages (tables/store.json). Keystone never hosts the files.
@@ -158,6 +158,30 @@ function unzipTables(buf) {
   return out;
 }
 
+// ---------- what works ----------
+
+// Unity tables reach the game through Cheat Engine's Mono/IL2CPP helper,
+// which Keystone doesn't have; the script is otherwise fine Lua.
+const UNITY = /LaunchMonoDataCollector|\bmono_\w+\s*\(|\bil2cpp/i;
+
+// How much of a table Keystone can run: mods (values), scripts, and the
+// ones that need Cheat Engine itself. Counted from the file, before any of
+// it runs, so a table that makes its mods with Lua only shows that it does.
+function summarizeTable(xml) {
+  const records = parseCheatTable(xml, { sourceName: 'x' });
+  const out = { mods: 0, scripts: 0, needsCE: 0, types: 0, luaStartup: Boolean(tableLuaScript(xml)) };
+  for (const r of records) {
+    if (r.kind === 'value') out.mods++;
+    else if (r.kind === 'script') { if (UNITY.test(r.script)) out.needsCE++; else out.scripts++; }
+    else if (r.kind === 'unsupported') { if (/^Script:/.test(r.reason || '')) out.needsCE++; else out.types++; }
+  }
+  return out;
+}
+
+const addUp = (list) => list.reduce((a, b) => ({
+  mods: a.mods + b.mods, scripts: a.scripts + b.scripts, needsCE: a.needsCE + b.needsCE, types: a.types + b.types, luaStartup: a.luaStartup || b.luaStartup,
+}), { mods: 0, scripts: 0, needsCE: 0, types: 0, luaStartup: false });
+
 // ---------- the store ----------
 
 class TableStore extends EventEmitter {
@@ -229,11 +253,33 @@ class TableStore extends EventEmitter {
             latestName: rec.latestName || null,
             lastChecked: rec.lastChecked || null,
             check: rec.check || null,
+            summary: this._summary(t.id, rec),
           } : null,
         };
       }),
       updates: tables.filter((t) => this.status(t.id) === 'update').length,
     };
+  }
+
+  // Installs from before summaries existed get one the first time they're listed.
+  _summary(id, rec) {
+    if (rec.summary) return rec.summary;
+    try {
+      const dir = path.join(this.userTablesDir, rec.packId);
+      rec.summary = addUp(rec.files.filter((f) => fs.existsSync(path.join(dir, f))).map((f) => summarizeTable(fs.readFileSync(path.join(dir, f), 'utf8'))));
+      fs.writeFileSync(this.file, JSON.stringify(this.data, null, 2));
+    } catch {
+      return null;
+    }
+    return rec.summary;
+  }
+
+  // The installed files of a table, for opening in Cheat Engine.
+  files(id) {
+    const rec = this._installed(id);
+    if (!rec) throw new Error('That table isn’t installed.');
+    const dir = path.join(this.userTablesDir, rec.packId);
+    return rec.files.map((f) => path.join(dir, f)).filter((f) => fs.existsSync(f));
   }
 
   // A card was clicked: its page is about to open.
@@ -283,8 +329,9 @@ class TableStore extends EventEmitter {
       if (x.data.length > MAX_FILE) throw new Error(`${x.name} is too big to be a cheat table.`);
       // Refuse anything that isn't really a table before it lands where it
       // would load next time the game starts.
-      parseCheatTable(x.data.toString('utf8'), { sourceName: x.name });
+      x.summary = summarizeTable(x.data.toString('utf8'));
     }
+    const summary = addUp(tables.map((x) => x.summary));
 
     const dir = path.join(this.userTablesDir, t.packId);
     fs.mkdirSync(dir, { recursive: true });
@@ -325,9 +372,10 @@ class TableStore extends EventEmitter {
       lastChecked: prev?.lastChecked || null,
       check: prev?.check || null,
       notifiedId: prev?.notifiedId || null,
+      summary,
     };
     this._save();
-    return { entry: t, files: files.map((f) => path.join(dir, f)), replaced: Boolean(prev) };
+    return { entry: t, files: files.map((f) => path.join(dir, f)), replaced: Boolean(prev), summary };
   }
 
   remove(id) {
@@ -379,4 +427,16 @@ class TableStore extends EventEmitter {
   }
 }
 
-module.exports = { TableStore, loadCatalog, parseTopicPage, unzipTables, safeName, topicId, CHECK_EVERY, DAY };
+// "40 mods and 12 scripts work in Keystone; 5 need Cheat Engine."
+function describeSummary(s) {
+  if (!s) return '';
+  const n = (k, one, many) => (s[k] === 1 ? `1 ${one}` : `${s[k]} ${many}`);
+  const works = [s.mods && n('mods', 'mod', 'mods'), s.scripts && n('scripts', 'script', 'scripts')].filter(Boolean);
+  const not = s.needsCE + s.types;
+  let text = works.length ? `${works.join(' and ')} work${s.mods + s.scripts === 1 ? 's' : ''} in Keystone` : 'Nothing in it runs in Keystone';
+  if (!works.length && s.luaStartup) text = 'It makes its mods with Lua when it opens';
+  if (not) text += `; ${not} need${not === 1 ? 's' : ''} Cheat Engine`;
+  return `${text}.`;
+}
+
+module.exports = { TableStore, loadCatalog, parseTopicPage, unzipTables, safeName, topicId, summarizeTable, describeSummary, CHECK_EVERY, DAY };

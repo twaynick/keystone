@@ -4,7 +4,7 @@ const { EventEmitter } = require('events');
 const fs = require('fs');
 const path = require('path');
 const { Session } = require('./engine/session');
-const { parseCheatTable } = require('./engine/ct-parser');
+const { parseCheatTable, tableLuaScript } = require('./engine/ct-parser');
 const { DemoGame } = require('./engine/demo-game');
 const { listProcesses } = require('./engine/process-list');
 const { GameStore } = require('./store');
@@ -25,8 +25,17 @@ const { IdentifyModel } = require('./identify');
 const MAX_PROFILE_NAME = 40;
 
 class Controller extends EventEmitter {
-  constructor({ packsDir, dataDir, tablesDir = null, commands = {}, installed = {}, clipboard = null }) {
+  constructor({ packsDir, dataDir, tablesDir = null, commands = {}, installed = {}, clipboard = null, demoMovesHeap = false, openMemory = null }) {
     super();
+    // Opens a running game's memory (WinMemory); injected by tests.
+    this.openMemory = openMemory || ((pid) => new (require('./engine/win-memory').WinMemory)(pid));
+    // Private-server mode: { pid } of the game run it was started for.
+    this.privateServer = null;
+    // How often a connected game with anti-cheat is checked for it starting.
+    this.acGuardMs = 2000;
+    // The app's demo game puts its heap somewhere new each start, like a
+    // real game, so heap values really do move (tests keep it fixed).
+    this.demoMovesHeap = demoMovesHeap;
     // Electron's clipboard ({ readText, writeText }); Find me reads ARK's ccc
     // output from it. Injected so tests can fake it.
     this.clipboard = clipboard;
@@ -138,37 +147,123 @@ class Controller extends EventEmitter {
   }
 
   // Why mods are off for the selected game before even trying, or null.
-  modsBlocked() {
+  modsBlocked({ fresh = false } = {}) {
     if (!this.game || this.game.demo) return null;
     if (this.pack && !this.pack.memory) return 'online-only';
-    if (this.pack?.offlineOnly && !this.store.load(this.game.key).modsEnabled) return 'offline-off';
+    // The game's anti-cheat is running: nothing turns mods on, not the
+    // switch and not private-server mode.
+    if (!this.game.offline && this._antiCheatRunning({ fresh })) return 'anticheat';
+    if (this.pack?.offlineOnly && !this.store.load(this.game.key).modsEnabled && !this._privateActive()) return 'offline-off';
     return null;
+  }
+
+  // ---------- anti-cheat and private-server mode ----------
+
+  // The name of the pack's anti-cheat if one of its processes is running,
+  // else null. Cached briefly: snapshots ask often, and listing processes
+  // isn't free.
+  _antiCheatRunning({ fresh = false } = {}) {
+    const ac = this.pack?.antiCheat;
+    if (!ac?.processes?.length) return null;
+    const now = Date.now();
+    if (!fresh && this._acCache && this._acCache.pack === this.pack.id && now - this._acCache.at < 1500) return this._acCache.hit;
+    const names = new Set(ac.processes.map((n) => String(n).toLowerCase()));
+    const hit = this.listProcesses().some((p) => names.has(String(p.name).toLowerCase())) ? (ac.name || 'Anti-cheat') : null;
+    this._acCache = { pack: this.pack.id, at: now, hit };
+    return hit;
+  }
+
+  _privateActive() {
+    return Boolean(this.privateServer && this.game?.pid && this.privateServer.pid === this.game.pid);
+  }
+
+  // Mods for this run of the game only, on a server the player runs. Needs
+  // a pack that supports it, the game running, and its anti-cheat not.
+  startPrivateServer() {
+    const g = this._requireGame();
+    if (!this.pack?.privateServers) throw new Error('This game doesn’t have a private-server mode.');
+    if (g.offline || !g.pid) throw new Error('Start the game first. Private-server mode lasts for one run of the game.');
+    const ac = this._antiCheatRunning({ fresh: true });
+    if (ac) throw new Error(`${ac} is running, so this isn't a server without it. Keystone won't touch the game while ${ac} runs.`);
+    this.privateServer = { pid: g.pid, since: Date.now() };
+    const notices = [];
+    if (!this.session) {
+      clearInterval(this._watch);
+      this._watch = null;
+      this.modsError = null;
+      this._connectMemory(notices);
+    }
+    this.emit('structure', this.snapshot());
+    this.emit('overlay');
+    return { snapshot: this.snapshot(), notices };
+  }
+
+  stopPrivateServer() {
+    this._requireGame();
+    this.privateServer = null;
+    if (this.session && this.modsBlocked()) this._releaseMemory('mods are off for this game');
+    this.emit('structure', this.snapshot());
+    this.emit('overlay');
+    return { snapshot: this.snapshot(), notices: [] };
+  }
+
+  // Lets go of the game's memory (scripts undone first) but keeps it
+  // selected, watching for it to close.
+  _releaseMemory(why) {
+    this._dropSession();
+    this.modsError = why;
+    clearInterval(this._watch);
+    this._watch = null;
+    this._watchProcess(this.game.pid, this.game.name);
+  }
+
+  // While mods are connected to a game with anti-cheat: if it starts (the
+  // player joined a protected server), let go at once.
+  _guardAntiCheat() {
+    clearInterval(this._acGuard);
+    this._acGuard = null;
+    if (!this.pack?.antiCheat?.processes?.length || this.game?.demo) return;
+    this._acGuard = setInterval(() => {
+      if (!this.session) { clearInterval(this._acGuard); this._acGuard = null; return; }
+      const ac = this._antiCheatRunning({ fresh: true });
+      if (!ac) return;
+      clearInterval(this._acGuard);
+      this._acGuard = null;
+      this.privateServer = null;
+      this._releaseMemory(`${ac} is running`);
+      this.emit('notice', `${ac} started, so Keystone let go of the game and switched its mods off. They stay off while ${ac} runs.`);
+      this.emit('structure', this.snapshot());
+      this.emit('overlay');
+    }, this.acGuardMs);
+    this._acGuard.unref?.();
   }
 
   _connectMemory(notices) {
     const { name, pid, demo } = this.game;
-    const blocked = this.modsBlocked();
+    const blocked = this.modsBlocked({ fresh: true });
     if (blocked) {
       // Never even open the process: an anti-cheat sees the attempt, not
       // just a successful read.
-      this.modsError = blocked === 'online-only' ? 'this game is online-only' : 'mods are off for this game';
+      this.modsError = blocked === 'online-only' ? 'this game is online-only'
+        : blocked === 'anticheat' ? `${this._antiCheatRunning()} is running` : 'mods are off for this game';
       this._watchProcess(pid, name);
       return;
     }
     let memory = null;
     try {
       if (demo) {
-        memory = new DemoGame();
+        const shift = typeof this.demoMovesHeap === 'function' ? this.demoMovesHeap()
+          : this.demoMovesHeap ? BigInt(1 + Math.floor(Math.random() * 200)) * 0x100000n : 0n;
+        memory = new DemoGame({ heapShift: shift });
       } else {
-        // Required lazily: koffi's kernel32 bindings only exist on Windows.
-        const { WinMemory } = require('./engine/win-memory');
-        memory = new WinMemory(pid);
+        // WinMemory is required lazily: koffi's kernel32 bindings only exist on Windows.
+        memory = this.openMemory(pid);
       }
     } catch (err) {
       this.modsError = err.message;
       notices.push(`Mods aren't available for this game (${err.message}) Commands, the map and waypoints still work.`);
     }
-    if (memory) this._startSession(memory, name, pid, notices);
+    if (memory) { this._startSession(memory, name, pid, notices); this._guardAntiCheat(); }
     else this._watchProcess(pid, name);
   }
 
@@ -179,10 +274,9 @@ class Controller extends EventEmitter {
     const g = this._requireGame();
     this.store.update(g.key, (d) => { d.modsEnabled = Boolean(on); });
     const notices = [];
-    if (!on && this.session) {
-      this._dropSession();
-      this.modsError = 'mods are off for this game';
-      this._watchProcess(g.pid, g.name);
+    if (!on && this.session && this.modsBlocked()) {
+      // (A private-server session keeps its mods until the game closes.)
+      this._releaseMemory('mods are off for this game');
     } else if (on && !this.session && !g.offline) {
       clearInterval(this._watch);
       this.modsError = null;
@@ -258,6 +352,7 @@ class Controller extends EventEmitter {
     session.on('structure', () => this.emit('structure', this.snapshot()));
     session.on('values', (v) => this.emit('values', v));
     session.on('detached', () => this._gameExited(name));
+    session.on('notice', (text) => this.emit('notice', text));
     this.session = session;
     session.start();
 
@@ -269,7 +364,7 @@ class Controller extends EventEmitter {
     for (const t of autoTables({ bundledDir: this.tablesDir, userDir: this.userTablesDir }, this.pack, this.game)) {
       try {
         this._loadTable(t.file, { remember: false });
-        this.autoLoaded.push({ name: t.name, source: t.source, author: t.author, url: t.url, note: t.note });
+        this.autoLoaded.push({ name: t.name, source: t.source, author: t.author, url: t.url, note: t.note, file: t.file });
       } catch (err) { notices.push(`${t.name}: ${err.message}`); }
     }
     // Reload the tables used last time, then the active profile. Order
@@ -304,6 +399,8 @@ class Controller extends EventEmitter {
   // but drop the memory session.
   _gameExited(name) {
     this._dropSession();
+    // Private-server mode ends with the run it was for.
+    this.privateServer = null;
     clearInterval(this._watch);
     this._watch = null;
     if (this.game) {
@@ -318,6 +415,8 @@ class Controller extends EventEmitter {
   }
 
   _dropSession() {
+    clearInterval(this._acGuard);
+    this._acGuard = null;
     const s = this.session;
     this.session = null;
     if (s) {
@@ -339,6 +438,7 @@ class Controller extends EventEmitter {
 
   _teardown() {
     this._dropSession();
+    this.privateServer = null;
     this.game = null;
     this.pack = null;
     this.modsError = null;
@@ -362,7 +462,7 @@ class Controller extends EventEmitter {
     for (const f of files) {
       this._loadTable(f, { remember: false });
       const t = credits.get(f) || { name: path.basename(f).replace(/\.ct$/i, '') };
-      this.autoLoaded.push({ name: t.name, source: 'mine', author: t.author || null, url: t.url || null, note: t.note || null });
+      this.autoLoaded.push({ name: t.name, source: 'mine', author: t.author || null, url: t.url || null, note: t.note || null, file: f });
     }
     this.emit('structure', this.snapshot());
     return true;
@@ -379,16 +479,30 @@ class Controller extends EventEmitter {
     const tableName = path.basename(filePath);
     // Source name goes into record ids, so ids stay stable across reloads of
     // the same file and saved profiles keep matching.
-    const records = parseCheatTable(xml, { sourceName: tableName.replace(/\.ct$/i, '') });
-    if (!records.length) throw new Error(`${tableName} has no entries.`);
-    s.addRecords(records, tableName);
+    const source = tableName.replace(/\.ct$/i, '');
+    const records = parseCheatTable(xml, { sourceName: source });
+    const lua = tableLuaScript(xml);
+    if (!records.length && !lua) throw new Error(`${tableName} has no entries.`);
+    s.addRecords(records, tableName, `ct:${source}`);
+    // The table's startup script, after its entries exist (it often looks
+    // them up, or makes more). A failure leaves the rest of the table working.
+    let all = records;
+    if (lua) {
+      try {
+        s.runTableScript(lua, source);
+      } catch (err) {
+        this.emit('notice', `${tableName}: its Lua startup script stopped (${err.message}). The rest of the table loaded.`);
+      }
+      all = s.records.filter((r) => r.id.startsWith(`ct:${source}:`));
+      if (!all.length) throw new Error(`${tableName} has no entries, and its Lua script didn't make any.`);
+    }
     if (remember) {
       const abs = path.resolve(filePath);
       this.store.update(this.game.key, (d) => {
         if (!d.tables.includes(abs)) d.tables.push(abs);
       });
     }
-    return records;
+    return all;
   }
 
   setEnabled(id, enabled) { this._requireSession().setEnabled(id, enabled); return true; }
@@ -587,6 +701,12 @@ class Controller extends EventEmitter {
       modsBlocked: this.modsBlocked(),
       offlineOnly: Boolean(this.pack?.offlineOnly),
       offlineNote: this.pack?.offlineNote || null,
+      // The "Use mods in this game" switch itself (private-server mode can
+      // have mods on while it's off).
+      modsSwitch: Boolean(this.pack?.offlineOnly && saved.modsEnabled),
+      privateServers: Boolean(this.pack?.privateServers),
+      privateServer: this._privateActive(),
+      antiCheat: this.pack?.antiCheat?.name || null,
       // Tables that loaded by themselves, with who made them.
       autoTables: this.session ? this.autoLoaded : [],
       profiles: this.profileSummary(),

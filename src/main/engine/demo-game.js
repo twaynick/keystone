@@ -20,12 +20,24 @@
 //   demo.exe+0x3000 int32 day   (a value in the game's own static memory,
 //                                so the value finder has one that keeps its
 //                                address across restarts)
+//   demo.exe+0x2200           -> pointer to World (heap+0x2000), and
+//   World+0x08                -> Player: a second, two-step way to Player
+//   demo.exe+0x2100           a stale pointer that happens to land next to
+//                             Player's gold on a fresh start (where the heap
+//                             was the first time). It goes nowhere after a
+//                             restart, like the junk a real pointer scan finds.
+//
+// heapShift moves the heap, the way a real game's heap lands somewhere new
+// every start; the app's demo picks one at random, so heap values move
+// between runs and the pointer finder has something to do.
 
 const MODULE_BASE = 0x140000000n;
 const HEAP_BASE = 0x20000000n;
 const PLAYER = HEAP_BASE + 0x100n;
 const INVENTORY = HEAP_BASE + 0x800n;
 const PLAYER_PTR = MODULE_BASE + 0x2000n;
+const STALE_PTR = MODULE_BASE + 0x2100n;
+const WORLD_PTR = MODULE_BASE + 0x2200n;
 const DAY = MODULE_BASE + 0x3000n;
 // subss xmm0,xmm1 / movss [rdi+10],xmm0
 const HURT_CODE = Buffer.from('f30f5cc1f30f114710', 'hex');
@@ -36,13 +48,17 @@ const P = { health: 0x10, stamina: 0x14, ammo: 0x18, gold: 0x1c, x: 0x30, y: 0x3
 const I = { wood: 0x08, stone: 0x0c };
 
 class DemoGame {
-  constructor({ tickMs = 50, loadingEveryMs = 45000, loadingForMs = 1500 } = {}) {
+  constructor({ tickMs = 50, loadingEveryMs = 45000, loadingForMs = 1500, heapShift = 0n } = {}) {
     this.pointerSize = 8;
     this.pid = 0;
     this.name = 'demo.exe';
+    this.heapBase = HEAP_BASE + BigInt(heapShift);
+    this.player = this.heapBase + 0x100n;
+    this.inventory = this.heapBase + 0x800n;
+    this.world = this.heapBase + 0x2000n;
     this.blocks = [
       { base: MODULE_BASE, buf: Buffer.alloc(0x10000) },
-      { base: HEAP_BASE, buf: Buffer.alloc(0x10000) },
+      { base: this.heapBase, buf: Buffer.alloc(0x10000) },
     ];
     this.modules = new Map([['demo.exe', { base: MODULE_BASE, size: 0x10000, name: 'demo.exe' }]]);
     this.t = 0;
@@ -54,14 +70,17 @@ class DemoGame {
     this.moved = { x: 0, y: 0, z: 0 };
     this.lastPos = null;
 
-    this._writePtr(PLAYER_PTR, PLAYER);
-    this._writePtr(PLAYER + BigInt(P.inv), INVENTORY);
-    this._f(PLAYER, P.health, 100);
-    this._f(PLAYER, P.stamina, 100);
-    this._i(PLAYER, P.ammo, 30);
-    this._i(PLAYER, P.gold, 250);
-    this._i(INVENTORY, I.wood, 40);
-    this._i(INVENTORY, I.stone, 12);
+    this._writePtr(PLAYER_PTR, this.player);
+    this._writePtr(this.player + BigInt(P.inv), this.inventory);
+    this._writePtr(WORLD_PTR, this.world);
+    this._writePtr(this.world + 8n, this.player);
+    this._writePtr(STALE_PTR, HEAP_BASE + 0x100n + 0x18n);
+    this._f(this.player, P.health, 100);
+    this._f(this.player, P.stamina, 100);
+    this._i(this.player, P.ammo, 30);
+    this._i(this.player, P.gold, 250);
+    this._i(this.inventory, I.wood, 40);
+    this._i(this.inventory, I.stone, 12);
     this._i(MODULE_BASE, 0x3000, 1);
     HURT_CODE.copy(this.blocks[0].buf, 0x1000);
     AMMO_CODE.copy(this.blocks[0].buf, 0x1100);
@@ -79,22 +98,22 @@ class DemoGame {
     // Periodic "loading screen": the player pointer goes null, like real games
     // do between levels. Keystone should show the mod as waiting, not crash.
     const loading = this.loadingEveryMs > 0 && (this.t % this.loadingEveryMs) < this.loadingForMs && this.t > this.loadingForMs;
-    this._writePtr(PLAYER_PTR, loading ? 0n : PLAYER);
+    this._writePtr(PLAYER_PTR, loading ? 0n : this.player);
 
     const hurts = this.read(MODULE_BASE + 0x1000n, HURT_CODE.length).equals(HURT_CODE);
-    const hp = this._rf(PLAYER, P.health) - (hurts ? 2.5 * (ms / 1000) * 4 : 0);
-    this._f(PLAYER, P.health, hp <= 0 ? 100 : hp);
-    this._f(PLAYER, P.stamina, 50 + 50 * Math.sin(s * 0.8));
+    const hp = this._rf(this.player, P.health) - (hurts ? 2.5 * (ms / 1000) * 4 : 0);
+    this._f(this.player, P.health, hp <= 0 ? 100 : hp);
+    this._f(this.player, P.stamina, 50 + 50 * Math.sin(s * 0.8));
 
     if (Math.floor(this.t / 600) !== Math.floor((this.t - ms) / 600)) {
       const shoots = this.read(MODULE_BASE + 0x1100n, AMMO_CODE.length).equals(AMMO_CODE);
-      const ammo = this._ri(PLAYER, P.ammo) - (shoots ? 1 : 0);
-      this._i(PLAYER, P.ammo, ammo < 0 ? 30 : ammo);
+      const ammo = this._ri(this.player, P.ammo) - (shoots ? 1 : 0);
+      this._i(this.player, P.ammo, ammo < 0 ? 30 : ammo);
     }
     if (Math.floor(this.t / 10000) !== Math.floor((this.t - ms) / 10000)) this._i(MODULE_BASE, 0x3000, this._ri(MODULE_BASE, 0x3000) + 1);
     if (Math.floor(this.t / 2000) !== Math.floor((this.t - ms) / 2000)) {
-      this._i(PLAYER, P.gold, this._ri(PLAYER, P.gold) + 5);
-      this._i(INVENTORY, I.wood, this._ri(INVENTORY, I.wood) + 1);
+      this._i(this.player, P.gold, this._ri(this.player, P.gold) + 5);
+      this._i(this.inventory, I.wood, this._ri(this.inventory, I.wood) + 1);
     }
 
     // Wander a figure-eight across a ±3000 unit world. A position written
@@ -102,7 +121,7 @@ class DemoGame {
     // player carries on from the new spot like in a real game.
     if (this.lastPos) {
       for (const k of ['x', 'y', 'z']) {
-        const now = this._rf(PLAYER, P[k]);
+        const now = this._rf(this.player, P[k]);
         if (Math.abs(now - this.lastPos[k]) > 0.01) this.moved[k] += now - this.lastPos[k];
       }
     }
@@ -111,13 +130,13 @@ class DemoGame {
     const z = 120 + 30 * Math.sin(s * 0.3) + this.moved.z;
     const dx = 3000 * 0.05 * Math.cos(s * 0.05);
     const dy = 1800 * 0.1 * Math.cos(s * 0.1);
-    this._f(PLAYER, P.x, x);
-    this._f(PLAYER, P.y, y);
-    this._f(PLAYER, P.z, z);
+    this._f(this.player, P.x, x);
+    this._f(this.player, P.y, y);
+    this._f(this.player, P.z, z);
     // Read back rather than keep x/y/z: the stored floats are 32-bit, so
     // comparing against the doubles would see a "move" every step.
-    this.lastPos = { x: this._rf(PLAYER, P.x), y: this._rf(PLAYER, P.y), z: this._rf(PLAYER, P.z) };
-    this._f(PLAYER, P.yaw, (Math.atan2(dy, dx) * 180) / Math.PI);
+    this.lastPos = { x: this._rf(this.player, P.x), y: this._rf(this.player, P.y), z: this._rf(this.player, P.z) };
+    this._f(this.player, P.yaw, (Math.atan2(dy, dx) * 180) / Math.PI);
   }
 
   // ---- backend interface ----
@@ -144,7 +163,7 @@ class DemoGame {
     return base;
   }
 
-  free(addr) { this.blocks = this.blocks.filter((b) => b.base !== addr || b.base === MODULE_BASE || b.base === HEAP_BASE); }
+  free(addr) { this.blocks = this.blocks.filter((b) => b.base !== addr || b.base === MODULE_BASE || b.base === this.heapBase); }
   protect() { return 0x40; }
   flush() {}
   getModule(name) { return this.modules.get(String(name).toLowerCase()) || null; }

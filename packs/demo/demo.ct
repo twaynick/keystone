@@ -94,6 +94,26 @@ unregistersymbol(AMMO)
 dealloc(newmem)
 </AssemblerScript>
         </CheatEntry>
+        <CheatEntry>
+          <ID>8</ID>
+          <Description>"Gold rain (Lua)"</Description>
+          <VariableType>Auto Assembler Script</VariableType>
+          <AssemblerScript>{$lua}
+-- A Lua script: a timer adds 100 gold every second while it's on.
+if syntaxcheck then return end
+[ENABLE]
+goldRain = createTimer(nil, false)
+goldRain.Interval = 1000
+goldRain.OnTimer = function()
+  local p = readPointer("demo.exe+2000")
+  if p and p ~= 0 then writeInteger(p + 0x1C, readInteger(p + 0x1C) + 100) end
+end
+goldRain.Enabled = true
+
+[DISABLE]
+if goldRain then goldRain.destroy(); goldRain = nil end
+</AssemblerScript>
+        </CheatEntry>
       </CheatEntries>
     </CheatEntry>
     <CheatEntry>

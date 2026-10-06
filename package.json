@@ -1,6 +1,6 @@
 {
   "name": "keystone",
-  "version": "0.29.0",
+  "version": "0.34.0",
   "description": "Mod control panel for single-player PC games: Cheat Engine tables as toggles, phone remote, in-game overlay.",
   "main": "src/main/main.js",
   "scripts": {
@@ -17,6 +17,7 @@
     "koffi": "^3.3.2",
     "marked": "^18.0.14",
     "qrcode": "^1.5.4",
+    "wasmoon": "^1.16.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {
@@ -47,7 +48,8 @@
     "asarUnpack": [
       "node_modules/koffi/**",
       "node_modules/@koromix/**",
-      "node_modules/iced-x86/**"
+      "node_modules/iced-x86/**",
+      "node_modules/wasmoon/**"
     ],
     "win": {
       "target": [

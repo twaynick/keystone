@@ -106,6 +106,11 @@
                   <button data-v="off">Off</button><button data-v="on">On</button>
                 </span>
               </label>
+              <div class="private-row" id="privateRow" hidden>
+                <span class="badge accent" id="privateBadge" hidden>Own server</span>
+                <p id="privateText"></p>
+                <button class="btn small" id="privateBtn"></button>
+              </div>
             </div>
 
             <section class="empty" id="emptyNoTable" hidden>
@@ -165,7 +170,7 @@
                   <h3>My mods</h3>
                   <button class="btn small" id="fShare">Share as table</button>
                 </div>
-                <p class="block-note">Saved mods come back every time you open the game, and <strong>Share as table</strong> saves them as a file a friend can load. To ship them with Keystone, put the file in the game's pack folder as <code>mods.ct</code>. Mods marked <em>until the game closes</em> are on values whose address changes every time the game starts.</p>
+                <p class="block-note">Saved mods come back every time you open the game, and <strong>Share as table</strong> saves them as a file a friend can load. To ship them with Keystone, put the file in the game's pack folder as <code>mods.ct</code>. Mods marked <em>until the game closes</em> are on values whose address changes every time the game starts: <strong>Make it last</strong> finds a way to them that survives a restart.</p>
                 <div id="fMineList"></div>
               </div>
             </section>

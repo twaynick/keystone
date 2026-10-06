@@ -74,11 +74,17 @@ test('scripts: sections, comments, patterns and what can\'t run', () => {
   assert.deepEqual(sections('alloc(x,4)').enable, ['alloc(x,4)'], 'no markers: all enable');
   const p = parsePattern('48 8B ?? 1* *');
   assert.deepEqual(p.mask, [0xff, 0xff, 0, 0xf0, 0]);
-  assert.match(unsupportedReason('[ENABLE]\n{$lua}\nprint(1)'), /Lua/);
+  assert.equal(unsupportedReason('[ENABLE]\n{$lua}\nprint(1)'), null, 'Lua runs now');
+  assert.match(unsupportedReason('[ENABLE]\n{$luacode}\nprint(1)'), /Lua inside the game/);
+  assert.match(unsupportedReason('[ENABLE]\n{$c}\nint x;'), /C code/);
   assert.equal(unsupportedReason('[ENABLE]\nnop'), null);
   const recs = parseCheatTable('<CheatTable><CheatEntries><CheatEntry><ID>1</ID><Description>"L"</Description><VariableType>Auto Assembler Script</VariableType><AssemblerScript>[ENABLE]\n{$lua}\n[DISABLE]</AssemblerScript></CheatEntry></CheatEntries></CheatTable>');
-  assert.equal(recs[0].kind, 'unsupported');
-  assert.match(recs[0].reason, /Lua/);
+  assert.equal(recs[0].kind, 'script');
+  // Lines before [ENABLE] belong to both sections, as in Cheat Engine.
+  const both = sections('define(x,1)\n[ENABLE]\nnop\n[DISABLE]\nint3');
+  assert.deepEqual(both.enable, ['define(x,1)', 'nop']);
+  assert.deepEqual(both.disable, ['define(x,1)', 'int3']);
+  assert.deepEqual(sections('nop').disable, [], 'no markers: nothing to undo');
 });
 
 test('patterns are found across 16 MB chunk edges', () => {

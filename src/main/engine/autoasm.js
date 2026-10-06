@@ -13,8 +13,10 @@ const asm = require('./asm');
 //   label / registersymbol / unregistersymbol / define / assert / fullaccess
 //   name: and address: lines, instructions (see asm.js), db dw dd dq,
 //   nop N, readmem(address,size), reassemble(address)
+//   {$lua} ... {$asm} blocks and luacall(...), run by lua.js; a block's
+//   returned text becomes part of the script, as in Cheat Engine
 // Not supported (the script shows why instead of half-running):
-//   Lua ({$lua}, luacall), createthread, loadlibrary, loadbinary, include.
+//   createthread, loadlibrary, loadbinary, include, {$luacode}, {$c}.
 //
 // A section runs all-or-nothing: everything is assembled first, then
 // written; if a write fails, what was written is put back and the memory
@@ -27,8 +29,8 @@ const asm = require('./asm');
 class ScriptError extends Error {}
 
 const UNSUPPORTED = [
-  [/\{\$lua\}/i, 'It uses Lua, which needs Cheat Engine.'],
-  [/^\s*luacall\s*\(/im, 'It uses Lua, which needs Cheat Engine.'],
+  [/\{\$luacode\}/i, 'It runs Lua inside the game, which needs Cheat Engine.'],
+  [/\{\$c(code)?\}/i, 'It uses C code, which needs Cheat Engine’s compiler.'],
   [/^\s*createthread\s*\(/im, 'It starts a thread in the game, which Keystone doesn’t do.'],
   [/^\s*loadlibrary\s*\(/im, 'It loads a DLL into the game, which Keystone doesn’t do.'],
   [/^\s*loadbinary\s*\(/im, 'It loads a file into the game, which Keystone doesn’t do.'],
@@ -62,20 +64,54 @@ function stripComments(text) {
   }).join('\n');
 }
 
-// { enable: [lines], disable: [lines] }. A script with no [ENABLE] marker is
-// all enable (Cheat Engine treats it the same way).
-function sections(script) {
-  const lines = stripComments(script).split('\n');
-  const out = { enable: [], disable: [] };
+// The raw text of one section, before comments are removed (Lua blocks
+// need theirs). As in Cheat Engine, lines outside both [ENABLE] and
+// [DISABLE] (usually a header before [ENABLE]) belong to both, and a script
+// with no markers runs only when switched on.
+function rawSection(script, which) {
+  const lines = String(script).replace(/\r\n?/g, '\n').split('\n');
+  if (!lines.some((l) => /^\s*\[(enable|disable)\]\s*$/i.test(l))) return which === 'enable' ? lines.join('\n') : '';
+  const out = [];
   let cur = null;
-  let marked = false;
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (/^\[enable\]$/i.test(line)) { cur = 'enable'; marked = true; continue; }
-    if (/^\[disable\]$/i.test(line)) { cur = 'disable'; marked = true; continue; }
-    if (!line) continue;
-    if (!marked) out.enable.push(line);
-    else if (cur) out[cur].push(line);
+  for (const line of lines) {
+    const m = line.trim().match(/^\[(enable|disable)\]$/i);
+    if (m) { cur = m[1].toLowerCase(); continue; }
+    if (cur === null || cur === which) out.push(line);
+  }
+  return out.join('\n');
+}
+
+const cleanLines = (text) => stripComments(text).split('\n').map((l) => l.trim()).filter(Boolean);
+
+// { enable: [lines], disable: [lines] }, comments removed.
+function sections(script) {
+  return { enable: cleanLines(rawSection(script, 'enable')), disable: cleanLines(rawSection(script, 'disable')) };
+}
+
+// Runs the Lua in a section's text and puts what each block returns in its
+// place: {$lua} switches to Lua until {$asm}, and luacall(code) runs one
+// line of it.
+function expandLua(text, runLua) {
+  const parts = text.split(/(\{\$lua\}|\{\$asm\})/i);
+  let mode = 'asm';
+  let out = '';
+  for (const part of parts) {
+    if (/^\{\$lua\}$/i.test(part)) { mode = 'lua'; continue; }
+    if (/^\{\$asm\}$/i.test(part)) { mode = 'asm'; continue; }
+    if (mode === 'lua') {
+      if (!part.trim()) continue;
+      const res = runLua(part);
+      if (typeof res === 'string') out += `\n${res}\n`;
+      // Keep line numbers of later asm roughly where they were.
+      out += '\n'.repeat((part.match(/\n/g) || []).length);
+    } else {
+      out += part.split('\n').map((line) => {
+        const m = line.match(/^\s*luacall\s*\(([\s\S]*)\)\s*;?\s*$/i);
+        if (!m) return line;
+        runLua(m[1]);
+        return '';
+      }).join('\n');
+    }
   }
   return out;
 }
@@ -188,10 +224,62 @@ const PAGE_EXECUTE_READWRITE = 0x40;
 class ScriptRunner {
   // symbols: the session's registered symbols (Map name -> address), shared
   // with the mod values that use them.
-  constructor(memory, symbols) {
+  // lua: () => LuaHost, for scripts with Lua in them (see lua.js).
+  constructor(memory, symbols, { lua = null } = {}) {
     this.mem = memory;
     this.symbols = symbols;
+    this.lua = lua;
     this.state = new Map(); // record id -> { allocs: Map, syms: Map }
+  }
+
+  _resolveGlobal(name) {
+    const k = String(name).toLowerCase();
+    if (this.symbols.has(k)) return this.symbols.get(k);
+    const mod = this.mem.getModule(name);
+    return mod ? BigInt(mod.base) : null;
+  }
+
+  _readPtr(a) {
+    const b = this.mem.read(a, this.mem.pointerSize || 8);
+    if (!b) throw new ScriptError(`Can't read the pointer at ${a.toString(16)}.`);
+    return (this.mem.pointerSize || 8) === 8 ? b.readBigUInt64LE(0) : BigInt(b.readUInt32LE(0));
+  }
+
+  // An address expression with the game's modules and registered symbols
+  // ("game.exe+10", "[pPlayer]+8", "7FF61234"), or null if it can't be found.
+  evaluate(expr) {
+    try {
+      return BigInt.asUintN(64, asm.evalExpr(expr, { resolve: (n) => this._resolveGlobal(n), read: (a) => this._readPtr(a) }));
+    } catch {
+      return null;
+    }
+  }
+
+  // Every match of a byte pattern (or the first, when unique), in one module
+  // or all readable memory.
+  aobScan(pattern, moduleName = null, unique = false) {
+    let regions;
+    if (moduleName) {
+      const mod = this.mem.getModule(moduleName);
+      if (!mod) return [];
+      regions = this.mem.readableRegions(BigInt(mod.base), BigInt(mod.base) + BigInt(mod.size));
+    } else {
+      regions = this.mem.readableRegions();
+    }
+    const p = parsePattern(pattern);
+    const out = [];
+    for (const r of regions) {
+      let from = r.base;
+      const end = r.base + BigInt(r.size);
+      while (from < end) {
+        const at = findPattern(this.mem, [{ base: from, size: Number(end - from) }], p);
+        if (at === null) break;
+        out.push(at);
+        if (unique || out.length >= 10000) return out;
+        from = at + 1n;
+      }
+    }
+    return out;
   }
 
   _state(id) {
@@ -200,11 +288,23 @@ class ScriptRunner {
   }
 
   // Runs one section: 'enable' or 'disable'.
-  run(id, script, which) {
+  run(id, script, which, { name = 'script' } = {}) {
     const why = unsupportedReason(script);
     if (why) throw new ScriptError(why);
     const st = this._state(id);
-    let lines = sections(script)[which];
+    let text = rawSection(script, which);
+    if (/\{\$lua\}|^\s*luacall\s*\(/im.test(text)) {
+      if (!this.lua) throw new ScriptError('It uses Lua, which isn’t available here.');
+      const host = this.lua();
+      text = expandLua(text, (code) => {
+        try {
+          return host.run(code, { name, recordId: id });
+        } catch (err) {
+          throw new ScriptError(err.message);
+        }
+      });
+    }
+    let lines = cleanLines(text);
 
     // define(name, text): plain text substitution, Cheat Engine style.
     const defines = [];
@@ -230,15 +330,9 @@ class ScriptRunner {
       const k = lower(name);
       if (labels.has(k)) return labels.get(k) ?? rip ?? 0n;
       if (local.has(k)) return local.get(k);
-      if (this.symbols.has(k)) return this.symbols.get(k);
-      const mod = this.mem.getModule(name);
-      return mod ? BigInt(mod.base) : null;
+      return this._resolveGlobal(name);
     };
-    const readPtr = (a) => {
-      const b = this.mem.read(a, this.mem.pointerSize || 8);
-      if (!b) throw new ScriptError(`Can't read the pointer at ${a.toString(16)}.`);
-      return (this.mem.pointerSize || 8) === 8 ? b.readBigUInt64LE(0) : BigInt(b.readUInt32LE(0));
-    };
+    const readPtr = (a) => this._readPtr(a);
     const ev = (expr, rip) => asm.evalExpr(expr, { resolve: (n) => resolve(n, rip), read: readPtr });
 
     try {
@@ -412,4 +506,4 @@ function merge(writes) {
   return out;
 }
 
-module.exports = { ScriptRunner, ScriptError, sections, stripComments, parsePattern, findPattern, unsupportedReason };
+module.exports = { ScriptRunner, ScriptError, sections, rawSection, expandLua, stripComments, parsePattern, findPattern, unsupportedReason };

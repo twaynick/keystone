@@ -10,13 +10,14 @@ const { Remote } = require('./remote');
 const { OverlayWindow } = require('./overlay-window');
 const { createTray } = require('./tray');
 const { KeystoneBrowser, PARTITION } = require('./browser-window');
-const { TableStore } = require('./table-store');
+const { TableStore, describeSummary } = require('./table-store');
 const { TableFetcher } = require('./table-fetch');
 const { ArtCache } = require('./art');
 const { Timers } = require('./timers');
 const { LibraryImages, mimeOf } = require('./library-images');
 const { HotkeyRegistry } = require('./hotkeys');
 const { loadPacks } = require('./packs');
+const { preloadLua } = require('./engine/lua');
 
 const ROOT = path.join(__dirname, '..', '..');
 let controller = null; // created once app paths are ready (needs userData)
@@ -157,6 +158,7 @@ function send(channel, payload) {
 function createController() {
   controller = new Controller({
     clipboard,
+    demoMovesHeap: true,
     packsDir: path.join(ROOT, 'packs'),
     dataDir: app.getPath('userData'),
     commands: {
@@ -178,6 +180,7 @@ function createController() {
   controller.on('structure', (snap) => send('session:structure', snap));
   controller.on('values', (v) => send('session:values', v));
   controller.on('detached', (info) => send('session:detached', info));
+  controller.on('notice', (text) => send('session:notice', text));
   controller.on('commands', () => send('commands:info', controller.commands.info()));
   // Value finder: progress at most ~8 times a second; results when a scan ends.
   let finderAt = 0;
@@ -272,7 +275,7 @@ function createController() {
     partition: PARTITION,
     tmpDir: path.join(app.getPath('temp'), 'keystone-tables'),
   });
-  tableFetch.on('installed', ({ entry, files, replaced }) => {
+  tableFetch.on('installed', ({ entry, files, replaced, summary }) => {
     const open = controller.session && controller.pack?.id === entry.packId;
     let where = `It loads when you open ${entry.game}.`;
     // The old version's mods are already loaded; swapping tables under a
@@ -281,7 +284,7 @@ function createController() {
     else if (open) {
       try { controller.loadInstalledTables(entry.packId, files); where = 'Its mods are on the Mods tab now.'; } catch (err) { where = `It couldn't load: ${err.message}`; }
     }
-    const text = `${replaced ? 'Updated' : 'Installed'} ${entry.title}. ${where}`;
+    const text = `${replaced ? 'Updated' : 'Installed'} ${entry.title}. ${describeSummary(summary)} ${where}`.replace(/\s+/g, ' ');
     browser.notice(text);
     send('tables:notice', { text, kind: 'info' });
   });
@@ -341,6 +344,15 @@ function createController() {
 // Electron turns thrown errors into "Error invoking remote method ..." noise,
 // so every handler returns { ok, data } / { ok: false, error } instead and
 // the renderer shows the real message.
+// Opens a table with whatever Windows opens .CT files with: Cheat Engine,
+// when it's installed. Keystone only hands Windows the file.
+async function openInCheatEngine(file) {
+  if (!file || !fs.existsSync(file)) throw new Error('That table’s file isn’t there any more.');
+  const err = await shell.openPath(file);
+  if (err) throw new Error('Windows doesn’t know what to open cheat tables with. Install Cheat Engine from cheatengine.org (its installer offers extra software; you can decline it), then try again.');
+  return true;
+}
+
 function handle(channel, fn) {
   ipcMain.handle(channel, async (_event, ...args) => {
     try {
@@ -378,6 +390,9 @@ handle('finder:cancel', () => controller.finder.cancel());
 handle('finder:addMod', (m) => controller.finder.addMod(m || {}));
 handle('finder:renameMod', (id, name) => controller.finder.renameMod(String(id), name));
 handle('finder:removeMod', (id) => controller.finder.removeMod(String(id)));
+handle('finder:makeLast', (id) => controller.finder.makeLast(String(id)));
+handle('finder:cancelPointer', () => controller.finder.cancelPointer());
+handle('finder:check', (id, value) => controller.finder.checkMod(String(id), value));
 handle('finder:export', async () => {
   controller.finder.tableXml(); // says so before the dialog if there's nothing to share
   const res = await dialog.showSaveDialog(mainWindow, {
@@ -520,6 +535,9 @@ handle('tables:open', (id) => {
   return true;
 });
 handle('tables:remove', (id) => tableStore.remove(String(id)));
+handle('tables:openInCE', (id) => openInCheatEngine(tableStore.files(String(id))[0]));
+// A table loaded for the open game (Mods tab), by its place in the list.
+handle('tables:openLoadedInCE', (i) => openInCheatEngine(controller.autoLoaded[Number(i)]?.file));
 handle('tables:check', async () => { await tableFetch.checkAll(true); return tableStore.list(); });
 
 handle('game:launch', async (packId) => {
@@ -540,6 +558,7 @@ handle('game:launch', async (packId) => {
   return true;
 });
 handle('game:modsEnabled', (on) => controller.setModsEnabled(on));
+handle('game:privateServer', (on) => (on ? controller.startPrivateServer() : controller.stopPrivateServer()));
 handle('mod:hotkey', (id, accel) => {
   const clean = controller.setHotkey(id, accel);
   if (clean && hotkeyReg.sync(controller.activeHotkeys()).includes(clean)) {
@@ -575,7 +594,9 @@ handle('app:openFolder', (which) => {
   return shell.openPath(dirs[which]);
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Tables' Lua scripts need the interpreter loaded before a game attaches.
+  await preloadLua().catch((err) => console.error('Lua failed to load:', err));
   createController();
   createMainWindow();
   tray = createTray({

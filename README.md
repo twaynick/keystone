@@ -5,6 +5,8 @@ A mod control panel for single-player PC games. Load a Cheat Engine table for a 
 **Mods and online games:** memory mods are for offline and single-player play. Keystone reads and writes another program's memory the same way Cheat Engine does, and it never hides from, bypasses or works around anti-cheat.
 
 - Games with an offline or solo mode are flagged **Offline only**. Their mods stay off until you turn on **Use mods in this game** and accept the warning, and Keystone doesn't touch the game's memory at all while they're off.
+- **Anti-cheat guard:** a game pack can name its anti-cheat (ARK: Survival Ascended names BattlEye). While it runs, Keystone never opens the game, whatever is switched on, and if it starts while mods are connected (you joined a protected server), Keystone undoes its scripts, lets go of the game at once and says so.
+- **Private-server mode** (ARK: Survival Ascended): on a server you run, or one whose owner allows mods, with BattlEye turned off, **Use mods this session** turns mods on for that run of the game only. Keystone checks BattlEye isn't running first, and mods switch off again when the game closes, when you press **End**, or the moment BattlEye starts. Mods change your game only; things the server keeps track of won't change.
 - Games with no offline mode never get mods. Their Library, commands (where the game has them), map and overlay still work, because none of those touch the game.
 
 ## Install
@@ -76,6 +78,8 @@ Mods show **Waiting for the game** while their address can't be read, which is n
 
 **Table store.** Open **Tables** in the sidebar for community cheat tables, one card per table with the game's cover. Click a card and the table's own page opens in Keystone's browser (FearLess Revolution needs a free account; log in there once and the browser remembers it). Download the table on that page as you normally would: Keystone catches the file (a `.CT`, or a `.zip` with `.CT`s in it), checks it really is a cheat table, and puts it in that game's Tables folder with credit to its maker. It loads by itself whenever the game starts, or straight away if the game is already open. Keystone never hosts the files; every download comes from the creator's page.
 
+Each installed card says how much of the table runs in Keystone ("38 mods · 3 scripts · 5 need Cheat Engine"), counted from the file when it installs, and the install message says the same. Tables with parts Keystone can't run (Unity Mono/IL2CPP scripts, scripts that run code inside the game, text and byte-array values) are marked **Partly works** or **Needs Cheat Engine**, with a **Cheat Engine** button that opens the table there, if you have it installed. The Mods tab offers the same for loaded tables that have mods Keystone lists but can't run. Keystone only hands Windows the file; Cheat Engine does the rest.
+
 Installed tables are checked for updates about once a day. Keystone opens each table's page in the background, using the browser's login, and looks for a newer file in the first post. A new version gets an **Update** badge on its card, a count on **Tables** in the sidebar, and one Windows notification. **Get update** opens the page again, and the new file replaces the old one even if its name changed. **Check for updates** checks right away. If the page asks you to log in, or Cloudflare's browser check doesn't pass on its own, Keystone skips it and tries again the next day. **Remove** deletes a table from your PC. The list of tables is `tables/store.json`.
 
 **Tables that load by themselves.** Put a table in `tables/<game>/` in this repo and it ships in the installer and loads whenever that game starts, so mods work right after installing. `<game>` is the pack's folder name (like `fallout-4`). A `credits.json` next to it names who made each table, shown under the mods list (see `tables/README.md`). Tables for one PC only go in that game's **Tables folder** (button on the Mods tab, `%APPDATA%\Keystone\tables\<game>\`) and never end up in a build.
@@ -88,7 +92,9 @@ Installed tables are checked for updates about once a day. Keystone opens each t
 
 Decimal values (health bars, stamina) are found with **Decimal** as the kind of number; a typed "72.3" matches whatever the game rounds to 72.3.
 
-Where the value lives decides how long the mod lasts. Values inside the game's own files show as **Saved** (like `Game.exe+1A2B3C`): they're kept, come back every time you open the game, and can be shared. Most values are on the heap instead and show **Until the game closes**: the address changes every launch, so the mod works for this session only. (A pointer finder that makes those last is next.)
+Where the value lives decides how long the mod lasts. Values inside the game's own files show as **Saved** (like `Game.exe+1A2B3C`): they're kept, come back every time you open the game, and can be shared. Most values are on the heap instead and show **Until the game closes**: the address changes every launch.
+
+**Make it last** fixes that. It searches the game's memory backwards from the value for chains of pointers that start inside the game's own files (like `[[Game.exe+2200]+8]+1C`), up to 4 steps deep, the way Cheat Engine's pointer scan does. The mod is saved with every path found and uses the likeliest one. Most paths only work by luck in the run they were found in, so after you restart the game the mod says **check now**: press **Check**, type the number the game shows, and Keystone keeps only the paths that still lead to it. Once a check drops nothing, it stops asking. A search can be cancelled; if no path turns up, the mod keeps working until the game closes. (The demo game moves its heap every start, so you can try all of this there.)
 
 **Sharing:** **Share as table** saves your saved mods as a Cheat Engine table. A friend loads it with **Load table** (Keystone remembers it), and Cheat Engine opens it too. To ship mods with Keystone itself, put the file in the game's pack folder as `mods.ct`: a pack loads its `mods.ct` automatically.
 
@@ -245,10 +251,22 @@ No game handy? Click **Try the demo game**. It's a fake game inside Keystone who
 | Addresses like `game.exe+1234`, `"Game Assembly.dll"+10`, `[game.exe+20]+8` | Supported |
 | Auto Assembler scripts (Cheat Engine's templates: AOB injection, code caves, NOP patches, "get pointer" scripts) | Supported: On runs [ENABLE], Off runs [DISABLE] |
 | Addresses using symbols a script registers (e.g. `pPlayer`) | Supported once that script is on |
-| Scripts using Lua (`{$lua}`, `luacall`), `createthread`, `loadlibrary`, `include` | Listed with the reason, not runnable |
+| Lua: Lua script entries, `{$lua}` blocks and `luacall` in scripts, the table's own startup Lua script, mods a table makes with Lua | Supported (see below) |
+| `createthread`, `loadlibrary`, `include`, `{$luacode}`, `{$c}`, Unity Mono/IL2CPP Lua functions | Listed with the reason, not runnable |
 | Strings, byte arrays, custom types | Listed, not supported yet |
 
 **Scripts in detail.** Keystone runs `aobscanmodule`/`aobscan`/`aobscanregion`, `alloc`/`globalalloc` (placed near the game's code so a 5-byte jump reaches it), `dealloc`, `label`, `registersymbol`/`unregistersymbol`, `define`, `assert`, `fullaccess`, `db`/`dw`/`dd`/`dq`, `nop N`, `readmem` and `reassemble`, plus x86-64 instructions in Cheat Engine's syntax (numbers are hex unless `#decimal`; `(float)100` gives a float's bits). A script runs all-or-nothing: if any part fails, nothing it wrote stays and its memory is freed, and the error shows under the mod (for example "Couldn't find the code this script changes", usually meaning the game updated since the table was made). Scripts that are on are switched off when Keystone lets go of the game, so it's never left with a patch nobody manages.
+
+**Lua in detail.** Keystone runs the real Lua language (5.4; Cheat Engine uses 5.3, and table scripts run the same apart from rare corner cases) with Cheat Engine's functions that tables use most:
+
+- **Memory:** `readInteger`/`writeInteger` and the Byte, SmallInteger, Qword, Pointer, Float, Double, String and Bytes versions. Addresses can be numbers or text like `"[game.exe+20]+8"` or a registered symbol.
+- **Addresses and code:** `getAddress`, `getAddressSafe`, `getNameFromAddress`, `registerSymbol`/`unregisterSymbol`, `AOBScan`, `AOBScanUnique`, `AOBScanModuleUnique`, `autoAssemble` (with its disable info), `allocateMemory`/`deAlloc`, `getModuleSize`, `enumModules`, `targetIs64Bit`, `process`.
+- **The table's mods:** `getAddressList()`/`AddressList`, `getMemoryRecordByDescription`/`ByID`, and a mod's `Active`, `Value`, `Description`, `CurrentAddress`, `Count`/`Child`/`Parent`. `memrec` inside a script is that script's own mod. Switching one script from another works.
+- **Tables that make their mods with Lua:** `createMemoryRecord()` with `Description`, `Type` (`vtDword`, `vtSingle`, `vtAutoAssembler`...), `Address`, `OffsetCount`/`Offset[i]`, `Script`, `IsGroupHeader`, `ShowAsHex`, `appendToEntry` and `delete`. They show up like the table's other mods, grouped the same way, and get the same ids each time the table loads, so saved mods keep working.
+- **Timers and tasks:** `createTimer` (Interval, OnTimer, Enabled, destroy) and `createThread`, `sleep`, `synchronize`.
+- **Helpers:** the byte-table conversions (`dwordToByteTable`, `byteTableToFloat`, ...), `bAnd`/`bOr`/`bXor`/`bShl`/`bShr`, `showMessage` (shows as a message in Keystone), `print`.
+
+Lua runs in a locked box. It can only reach the game Keystone is attached to: no files, no programs, no internet. That's different from Cheat Engine, where a table's Lua can do anything on your PC, so Keystone runs a table's startup script without asking. Functions that reach outside the game say so when called. A run is stopped after 3 seconds, so a script that never ends can't freeze Keystone, and a timer that hits an error stops and says why. Tables that build their own windows (forms, buttons) run, but the windows don't show; questions they ask get "Yes". Timers stop when the game closes. The demo table's **Gold rain (Lua)** is a working example.
 
 Only use scripts in games where mods are allowed: they change the game's code, which anti-cheat looks for.
 
@@ -293,9 +311,11 @@ src/main/            Electron main process
     address.js       address expressions and pointer chains
     values.js        value types
     session.js       attached game: lock loop, live values
+    pointer-scan.js  the pointer finder behind "Make it last"
     scanner.js       memory scans for the value finder (first/next scan, undo)
     asm.js           x86-64 assembler for Cheat Engine syntax (encoding by iced-x86)
-    autoasm.js       runs Cheat Engine Auto Assembler scripts ([ENABLE]/[DISABLE])
+    autoasm.js       runs Cheat Engine Auto Assembler scripts ([ENABLE]/[DISABLE], {$lua} blocks)
+    lua.js           Cheat Engine's Lua API on real Lua (wasmoon), locked to the attached game
     demo-game.js     fake game used by the demo and tests
 src/renderer/        desktop UI
 src/remote-web/      phone web app (served to the phone by remote/server.js)
@@ -326,6 +346,28 @@ scripts/capture.js   dev helper: launch, run a snippet, save a screenshot
 ```
 
 ## Changelog
+
+### 0.34.0
+- **What works, on every installed table**: store cards and the install message say how many mods and scripts run in Keystone and how many need Cheat Engine. Tables are marked **Partly works** or **Needs Cheat Engine** when that applies.
+- **Open in Cheat Engine**: for those tables, a button on the card (and a link under the Mods tab's mods list) opens the table in Cheat Engine, when it's installed.
+
+### 0.33.0
+- **Private-server mode** for ARK: Survival Ascended: mods for one run of the game on your own server, after checking BattlEye isn't running. Ends when the game closes, when you press End, or as soon as BattlEye starts.
+- **Anti-cheat guard**: game packs can name their anti-cheat processes (`"antiCheat"` in pack.json). While one runs Keystone never opens the game, even with mods switched on, and it lets go straight away if one starts mid-session.
+
+### 0.32.0
+- **Make it last** (pointer finder): heap mods made with Find a value, the ones that only lasted until the game closed, can now be saved. Keystone finds pointer paths from the game's own files to the value and saves the mod with them; after a restart, **Check** with the number the game shows keeps the paths that still work. Cancellable, with progress. Saved pointer mods share as tables like any other.
+- The demo game now puts its heap somewhere new every start, like a real game, and has a two-step path and a decoy pointer to find.
+
+### 0.31.0
+- **Tables that make their mods with Lua** now work: a table's startup script can create mods with `AddressList.createMemoryRecord()` (values with pointer offsets, scripts, group headers, nested under each other) and change or delete them. They behave like mods from the file, keep the same ids every load (so saved mods find them), and show once the script finishes rather than one redraw per line.
+- Lua can read more about any mod: `CurrentAddress`, offsets, `Script`, `Count`/`Child`/`Parent`.
+
+### 0.30.0
+- **Lua**: tables' Lua now runs. Lua script entries switch on and off like any mod, `{$lua}` blocks and `luacall` work inside Auto Assembler scripts (a block's returned text becomes part of the script, as in Cheat Engine), and a table's own startup Lua script runs when it loads. Covers Cheat Engine's memory, address, AOB scan, autoAssemble, symbol, memory record, timer and conversion functions; see "Lua in detail".
+- Lua is locked to the attached game (no files, programs or internet), stopped after 3 seconds if it doesn't finish, and its timers end with the game. Errors show under the mod with the line number. Unity Mono/IL2CPP functions, the debugger and running code inside the game say what's missing.
+- Auto Assembler: lines before `[ENABLE]` now belong to both sections, as in Cheat Engine. `{$luacode}` and `{$c}` scripts explain why they can't run.
+- The demo table has a Lua mod, **Gold rain (Lua)**: a timer that adds gold every second.
 
 ### 0.29.0
 - **Table store**: a new **Tables** tab lists community cheat tables for Keystone's games as cards with cover art. Click one, download the table on its creator's page in Keystone's browser, and it installs itself into that game's Tables folder, with credit, and loads with the game (or right away if the game is open). `.CT` and `.zip` downloads work; anything else is explained and left to the normal save dialog. Nothing is redistributed: every file comes from the creator's own page.

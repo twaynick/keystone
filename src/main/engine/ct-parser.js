@@ -10,8 +10,10 @@ const { unsupportedReason } = require('./autoasm');
 // Record kinds:
 //   group  – a header (CE "GroupHeader" or any entry that only holds children)
 //   value  – a plain address/pointer with a numeric type: fully supported
-//   script – an Auto Assembler script, run by autoasm.js when switched on
-//   unsupported – strings, AOBs, custom types, or scripts using Lua
+//   script – an Auto Assembler script (Lua ones included), run by
+//            autoasm.js when switched on
+//   unsupported – strings, AOBs, custom types, or scripts using Cheat
+//            Engine features Keystone doesn't have
 
 const parser = new XMLParser({
   ignoreAttributes: true,
@@ -113,4 +115,22 @@ function cleanDescription(d) {
   return String(d).trim().replace(/^"(.*)"$/s, '$1').trim();
 }
 
-module.exports = { parseCheatTable };
+// The table's own Lua script (Cheat Engine's Table > Show Cheat Table Lua
+// Script), which runs when the table opens. null if there isn't one.
+function tableLuaScript(xml) {
+  let doc;
+  try { doc = parser.parse(xml); } catch { return null; }
+  const code = doc.CheatTable?.LuaScript;
+  return typeof code === 'string' && code.trim() ? code : null;
+}
+
+// One entry described the way a .CT file would (VariableType, Address,
+// Offsets.Offset, AssemblerScript, GroupHeader), for mods a table's Lua
+// makes with AddressList.createMemoryRecord.
+function recordFromEntry(e, id, groupPath) {
+  const name = cleanDescription(e.Description) || 'No description';
+  if (String(e.GroupHeader) === '1') return { id, name, kind: 'group', groupPath: [...groupPath], depth: groupPath.length };
+  return toRecord(e, id, name, groupPath);
+}
+
+module.exports = { parseCheatTable, tableLuaScript, recordFromEntry };

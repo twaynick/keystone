@@ -755,6 +755,8 @@ kbd {
 .finder-table .tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 9px; font: 500 11px var(--font-body); }
 .finder-table .tag.keep { background: var(--accent-wash); color: var(--accent); }
 .finder-table .tag.temp { background: rgba(255, 255, 255, 0.06); color: var(--muted); }
+.finder-table .tag.check { background: rgba(255, 181, 71, 0.16); color: var(--warn); }
+.finder-table td.act .btn + .btn { margin-left: 4px; }
 .finder-table td.act { text-align: right; white-space: nowrap; }
 .finder-table td.act .field { height: 32px; width: 170px; margin-right: 6px; }
 .finder-table td.act .btn { height: 32px; }
@@ -782,7 +784,14 @@ kbd {
 .store-card .tile-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }
 .store-card .tile-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .store-card.has-update .tile-art { box-shadow: 0 0 0 2px var(--accent-line); }
+.store-works { margin: 0; color: var(--body); font-size: 12px; line-height: 1.35; }
+.store-works.partly { color: var(--warn); }
 .store-status { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.35; min-height: 2.7em; }
 .store-card.has-update .store-status { color: var(--accent); }
-.store-actions { display: flex; gap: 6px; margin-top: auto; }
+.store-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+.store-actions .btn { min-width: 0; }
 .store-actions .btn.primary { flex: 1; }
+
+/* ---- private-server mode, inside the offline banner ---- */
+.private-row { flex-basis: 100%; display: flex; align-items: center; gap: 12px; padding-top: 10px; margin-top: 2px; border-top: 1px solid var(--line); }
+.private-row p { flex: 1; margin: 0; color: var(--body); font-size: 13px; }
