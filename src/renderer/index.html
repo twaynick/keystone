@@ -24,6 +24,11 @@
           <span class="nav-label" id="navGameName"></span>
           <span class="nav-dot" id="navDot" aria-hidden="true"></span>
         </button>
+        <button class="tab" data-view="tables" title="Table store">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5 5.5 4h13L20 8.5"/><path d="M4 8.5h16v1a2.7 2.7 0 0 1-5.3 0 2.7 2.7 0 0 1-5.4 0 2.7 2.7 0 0 1-5.3 0z"/><path d="M5.5 12.5V20h13v-7.5"/><path d="M10 20v-4h4v4"/></svg>
+          <span class="nav-label">Tables</span>
+          <span class="tab-badge" id="tablesBadge" title="Table updates" hidden></span>
+        </button>
         <button class="tab" data-view="phone" title="Phone">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 17.5h2"/></svg>
           <span class="nav-label">Phone</span>
@@ -519,6 +524,24 @@
       </section>
 
         </div>
+      </section>
+
+      <section class="home store" id="tablesView" hidden>
+        <header class="home-head">
+          <h1>Table store</h1>
+          <input class="field search" id="storeSearch" type="search" placeholder="Search games and tables" autocomplete="off">
+        </header>
+        <p class="store-intro">Cheat tables made by the community, straight from their creators' pages. Pick one, download it on the page that opens, and Keystone puts it with the game. It loads by itself when you play.</p>
+        <p class="store-login" id="storeLogin"></p>
+        <div class="store-bar">
+          <div class="cat-tabs home-filter" id="storeFilter" role="group" aria-label="Show">
+            <button data-filter="all" aria-pressed="true">All</button>
+            <button data-filter="installed" aria-pressed="false">Installed</button>
+            <button data-filter="update" aria-pressed="false">Updates</button>
+          </div>
+          <button class="btn small ghost" id="storeCheck">Check for updates</button>
+        </div>
+        <div class="game-grid store-grid" id="storeGrid"></div>
       </section>
 
       <section class="page" id="settingsView" hidden>

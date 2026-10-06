@@ -148,6 +148,12 @@ class KeystoneBrowser extends EventEmitter {
 
   hide() { this.win?.hide(); return true; }
 
+  // A short message across the top of the browser (a table just installed
+  // from the page you're on, say).
+  notice(text, kind = 'info') {
+    if (this.win && !this.win.isDestroyed()) this.win.webContents.send('browser:notice', { text, kind });
+  }
+
   shutdown() {
     this.quitting = true;
     globalShortcut.unregister(HOTKEY);

@@ -74,6 +74,10 @@ Mods are grouped like the cheat table's groups, with tabs to show one group at a
 
 Mods show **Waiting for the game** while their address can't be read, which is normal on loading screens and main menus. Locked mods stay locked and start writing again as soon as the game is back.
 
+**Table store.** Open **Tables** in the sidebar for community cheat tables, one card per table with the game's cover. Click a card and the table's own page opens in Keystone's browser (FearLess Revolution needs a free account; log in there once and the browser remembers it). Download the table on that page as you normally would: Keystone catches the file (a `.CT`, or a `.zip` with `.CT`s in it), checks it really is a cheat table, and puts it in that game's Tables folder with credit to its maker. It loads by itself whenever the game starts, or straight away if the game is already open. Keystone never hosts the files; every download comes from the creator's page.
+
+Installed tables are checked for updates about once a day. Keystone opens each table's page in the background, using the browser's login, and looks for a newer file in the first post. A new version gets an **Update** badge on its card, a count on **Tables** in the sidebar, and one Windows notification. **Get update** opens the page again, and the new file replaces the old one even if its name changed. **Check for updates** checks right away. If the page asks you to log in, or Cloudflare's browser check doesn't pass on its own, Keystone skips it and tries again the next day. **Remove** deletes a table from your PC. The list of tables is `tables/store.json`.
+
 **Tables that load by themselves.** Put a table in `tables/<game>/` in this repo and it ships in the installer and loads whenever that game starts, so mods work right after installing. `<game>` is the pack's folder name (like `fallout-4`). A `credits.json` next to it names who made each table, shown under the mods list (see `tables/README.md`). Tables for one PC only go in that game's **Tables folder** (button on the Mods tab, `%APPDATA%\Keystone\tables\<game>\`) and never end up in a build.
 
 **Making your own mods (Find a value).** No table for your game? Click **Find a value** on the Mods tab:
@@ -269,6 +273,8 @@ src/main/            Electron main process
   identify.js        "what is it?" tools, like the Phasmophobia ghost identifier
   finder.js          value finder and My mods (saved, session-only, shared as a table)
   tables.js          tables that load by themselves (bundled and per-PC) and their credits
+  table-store.js     Tables tab: catalog, installing downloads (.CT/.zip), update checks' page reading
+  table-fetch.js     Tables tab, Electron side: catches downloads in the browser, background update checks
   pcstats.js         CPU and RAM for the overlay's PC panel
   overlay-window.js  the see-through overlay window and its hotkeys
   commands/
@@ -297,7 +303,7 @@ src/overlay/         overlay page (minimap, stats, info)
 src/browser/         the browser window's toolbar page
 assets/              app icons
 src/shared/          shared styles, accent themes, Geist fonts (OFL), map math, crosshair drawing
-tables/             bundled cheat tables, loaded by game (see tables/README.md)
+tables/             bundled cheat tables, loaded by game (see tables/README.md); store.json lists the Tables tab
 packs/demo/          the demo game's pack: table, map, waypoints, info
 packs/ark-survival-ascended/  ASA pack: commands, creature and item IDs, guides
 packs/fallout-3/     Fallout 3 pack: console commands, 714 base-game items, bobblehead checklist, guides
@@ -320,6 +326,12 @@ scripts/capture.js   dev helper: launch, run a snippet, save a screenshot
 ```
 
 ## Changelog
+
+### 0.29.0
+- **Table store**: a new **Tables** tab lists community cheat tables for Keystone's games as cards with cover art. Click one, download the table on its creator's page in Keystone's browser, and it installs itself into that game's Tables folder, with credit, and loads with the game (or right away if the game is open). `.CT` and `.zip` downloads work; anything else is explained and left to the normal save dialog. Nothing is redistributed: every file comes from the creator's own page.
+- **Update alerts**: installed tables are checked about once a day using the browser's login. Newer files show as **Update** on the card, a count on the sidebar and a Windows notification (once per new file). Updates replace the old file. **Check for updates** and **Remove** on the tab.
+- 26 tables to start, across 16 games, all on FearLess Revolution.
+- Keystone's browser no longer adds "Electron" to its user agent, which some sites' bot checks objected to. It can show a short message across the top (used for "Installed …").
 
 ### 0.28.0
 - **Cheat Engine scripts work.** Auto Assembler scripts in tables now switch on and off like any mod (and take hotkeys, pins and the phone switch): code injections and caves, NOP patches, AOB scans, symbols and the rest of Cheat Engine's templates. Values that read through a symbol a script registers (`[pPlayer]+10`) work once that script is on. Scripts that need Lua say so instead of half-running.

@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, nativeTheme, shell, protocol, net, safeStorage, clipboard, Notification, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeTheme, shell, protocol, net, safeStorage, clipboard, Notification, globalShortcut, session } = require('electron');
 const { pathToFileURL } = require('url');
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +9,9 @@ const { Settings } = require('./settings');
 const { Remote } = require('./remote');
 const { OverlayWindow } = require('./overlay-window');
 const { createTray } = require('./tray');
-const { KeystoneBrowser } = require('./browser-window');
+const { KeystoneBrowser, PARTITION } = require('./browser-window');
+const { TableStore } = require('./table-store');
+const { TableFetcher } = require('./table-fetch');
 const { ArtCache } = require('./art');
 const { Timers } = require('./timers');
 const { LibraryImages, mimeOf } = require('./library-images');
@@ -24,6 +26,8 @@ let settings = null;
 let timers = null;
 let tray = null;
 let browser = null;
+let tableStore = null;
+let tableFetch = null;
 let art = null;
 let hotkeyReg = null;
 let quitting = false;
@@ -247,6 +251,50 @@ function createController() {
   browser = new KeystoneBrowser({ settings, root: ROOT, getLinks: () => (controller.game ? controller.library.info().links || [] : []) });
   browser.init();
 
+  // Sites see Keystone's browser as the Chrome it is. Electron's default
+  // user agent adds "Electron/.." and "keystone/..", which some sites (and
+  // Cloudflare's browser check, in front of FearLess) treat as a bot.
+  const web = session.fromPartition(PARTITION);
+  web.setUserAgent(web.getUserAgent().replace(/\s+(Electron|keystone)\/\S+/gi, ''));
+
+  // Tables tab: catalog, downloads into the tables folder, update checks.
+  tableStore = new TableStore({
+    catalogFile: path.join(ROOT, 'tables', 'store.json'),
+    dataDir: app.getPath('userData'),
+    userTablesDir: controller.userTablesDir,
+    packs: () => loadPacks([path.join(ROOT, 'packs'), path.join(app.getPath('userData'), 'packs')]),
+  });
+  tableStore.on('changed', () => send('tables:changed', tableStore.list()));
+  tableFetch = new TableFetcher({
+    store: tableStore,
+    session: web,
+    BrowserWindow,
+    partition: PARTITION,
+    tmpDir: path.join(app.getPath('temp'), 'keystone-tables'),
+  });
+  tableFetch.on('installed', ({ entry, files, replaced }) => {
+    const open = controller.session && controller.pack?.id === entry.packId;
+    let where = `It loads when you open ${entry.game}.`;
+    // The old version's mods are already loaded; swapping tables under a
+    // running session would orphan their frozen values and scripts.
+    if (replaced && open) where = `Reopen ${entry.game} in Keystone to switch to it.`;
+    else if (open) {
+      try { controller.loadInstalledTables(entry.packId, files); where = 'Its mods are on the Mods tab now.'; } catch (err) { where = `It couldn't load: ${err.message}`; }
+    }
+    const text = `${replaced ? 'Updated' : 'Installed'} ${entry.title}. ${where}`;
+    browser.notice(text);
+    send('tables:notice', { text, kind: 'info' });
+  });
+  tableFetch.on('notice', (text) => { browser.notice(text, 'error'); send('tables:notice', { text, kind: 'error' }); });
+  // One Windows notification per new file; clicking it opens the Tables tab.
+  tableFetch.on('update', (entry) => {
+    if (!Notification.isSupported()) return;
+    const n = new Notification({ title: `${entry.game}: table update`, body: `A newer version of "${entry.title}" is out. Open Keystone's Tables tab to get it.` });
+    n.on('click', () => { showMain(); send('app:goto', 'tables'); });
+    n.show();
+  });
+  tableFetch.init();
+
   art = new ArtCache({ dataDir: app.getPath('userData'), fetchImpl: (url) => net.fetch(url) });
   protocol.handle('ksart', async (req) => {
     const u = new URL(req.url);
@@ -463,6 +511,17 @@ handle('browser:home', (url) => browser.setHome(url));
 handle('browser:hide', () => browser.hide());
 
 // Games: library, launching, per-game mod switch
+handle('tables:list', () => tableStore.list());
+// A card was clicked: the table's page opens in Keystone's browser, where a
+// download from it lands in the game's tables folder.
+handle('tables:open', (id) => {
+  const entry = tableStore.open(String(id));
+  browser.open(entry.url);
+  return true;
+});
+handle('tables:remove', (id) => tableStore.remove(String(id)));
+handle('tables:check', async () => { await tableFetch.checkAll(true); return tableStore.list(); });
+
 handle('game:launch', async (packId) => {
   const target = await controller.launchTarget(packId);
   if (target.kind === 'path') {
@@ -537,7 +596,7 @@ app.whenReady().then(() => {
   remote.on('status', () => tray.rebuild());
 });
 
-app.on('before-quit', () => { quitting = true; browser?.shutdown(); hotkeyReg?.clear(); });
+app.on('before-quit', () => { quitting = true; browser?.shutdown(); tableFetch?.shutdown(); hotkeyReg?.clear(); });
 
 app.on('window-all-closed', async () => {
   overlayWin?.shutdown();

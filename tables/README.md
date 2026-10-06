@@ -23,3 +23,17 @@ name without `.exe`, in lowercase.
 
 Tables for just one PC go in `%APPDATA%\Keystone\tables\<game>\` instead (Mods tab,
 **Tables folder**). Those never end up in a build.
+
+## The Tables tab (`store.json`)
+
+`store.json` lists the community tables shown on the **Tables** tab. Keystone only links to them: each one is
+downloaded from its creator's page by whoever installs it.
+
+```json
+{ "id": "fo4-main", "pack": "fallout-4", "title": "Fallout 4", "url": "https://fearlessrevolution.com/viewtopic.php?t=210" }
+```
+
+- `id`: unique and never reused (installs and update checks are remembered by it).
+- `pack`: the game pack's folder name. Games with `"memory": false` get no tables.
+- `url`: the table's topic page. Downloads started from that topic install as this table.
+- Optional: `author` (otherwise read from the page), `note` (shown on the card).

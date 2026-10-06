@@ -354,6 +354,20 @@ class Controller extends EventEmitter {
     return dir;
   }
 
+  // A table just installed from the Tables tab, for the game that's open
+  // right now: load it straight away instead of on the next start.
+  loadInstalledTables(packId, files) {
+    if (!this.session || this.pack?.id !== packId) return false;
+    const credits = new Map(autoTables({ bundledDir: null, userDir: this.userTablesDir }, this.pack, this.game).map((t) => [t.file, t]));
+    for (const f of files) {
+      this._loadTable(f, { remember: false });
+      const t = credits.get(f) || { name: path.basename(f).replace(/\.ct$/i, '') };
+      this.autoLoaded.push({ name: t.name, source: 'mine', author: t.author || null, url: t.url || null, note: t.note || null });
+    }
+    this.emit('structure', this.snapshot());
+    return true;
+  }
+
   loadTableFile(filePath) {
     const records = this._loadTable(filePath, { remember: true });
     return { snapshot: this.snapshot(), summary: summarize(records, path.basename(filePath)) };

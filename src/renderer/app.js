@@ -29,6 +29,7 @@ const state = {
   lib: { info: null, page: { kind: 'home' }, entries: {}, filters: {}, searchTimer: null },
   cmd: { info: null, seg: null, catalogs: {}, filters: { q: '', category: '', map: '' }, selected: null, action: {}, values: {} },
   finder: { open: false, info: null, rowsKey: '', editing: null },
+  store: { data: null, q: '', filter: 'all', checking: false },
 };
 
 // Row elements by record id, so live value updates (4×/s) patch text in place
@@ -185,6 +186,7 @@ function go(view) {
   if (view === 'home') refreshProcesses();
   if (view === 'phone') loadRemote();
   if (view === 'settings') loadAppSettings();
+  if (view === 'tables') loadStore();
   if (view === 'game') loadTab();
 }
 
@@ -217,6 +219,7 @@ function render() {
   $('gameView').hidden = state.view !== 'game';
   $('phoneView').hidden = state.view !== 'phone';
   $('settingsView').hidden = state.view !== 'settings';
+  $('tablesView').hidden = state.view !== 'tables';
 
   // Sidebar entry for the open game.
   $('navGame').hidden = !attached;
@@ -247,6 +250,7 @@ function render() {
 
   if (attached && isPane('mods')) renderModsPane(snap);
   if (state.view === 'home') renderHome();
+  if (state.view === 'tables') renderStore();
 }
 
 function renderHero(snap) {
@@ -2375,6 +2379,120 @@ function wireLibrary() {
 }
 
 // ---------- app settings ----------
+// ---------- table store ----------
+async function loadStore() {
+  const data = await call(keystone.storeList());
+  if (data) setStore(data);
+}
+
+function setStore(data) {
+  state.store.data = data;
+  $('tablesBadge').hidden = !data.updates;
+  $('tablesBadge').textContent = String(data.updates || '');
+  if (state.view === 'tables') renderStore();
+}
+
+const CHECK_NOTE = {
+  login: 'Log in on the table’s page to get update alerts',
+  challenge: 'Couldn’t check for updates yet (the site was busy)',
+  error: 'Couldn’t check for updates (no connection?)',
+};
+
+function storeStatusLine(t) {
+  const i = t.installed;
+  if (!i) return t.note || state.store.data?.sites?.[t.host]?.name || t.host;
+  if (t.status === 'update') return `New version: ${i.latestName || 'on the page'}`;
+  if (i.check && CHECK_NOTE[i.check]) return CHECK_NOTE[i.check];
+  return i.lastChecked ? `Up to date · checked ${agoText(i.lastChecked)}` : `Installed ${agoText(i.at)}`;
+}
+
+function storeCard(t) {
+  const art = el('div', { class: 'tile-art' });
+  const initials = el('span', { class: 'initials', text: t.game });
+  initials.hidden = true;
+  art.append(initials, artImg(t.packId, 'cover', () => { initials.hidden = false; }));
+  const flags = el('div', { class: 'tile-flags' });
+  if (t.status === 'update') flags.append(el('span', { class: 'badge accent', text: 'Update' }));
+  else if (t.status === 'installed') flags.append(el('span', { class: 'badge ok', text: 'Installed' }));
+  if (t.offlineOnly) flags.append(el('span', { class: 'badge warn', text: 'Offline only' }));
+  art.append(flags);
+
+  const open = async () => { if (await call(keystone.storeOpen(t.id))) toast(t.status === 'get' ? 'Download the table on its page. Keystone installs it for you.' : 'Download the newest file on its page. Keystone swaps it in.'); };
+  const tile = el('button', { class: 'game-tile', title: `${t.title}: open its page` },
+    art,
+    el('span', { class: 'tile-name', text: t.title }),
+    el('span', { class: 'tile-sub', text: t.author ? `${t.game} · by ${t.author}` : t.game }));
+  tile.addEventListener('click', open);
+
+  const label = t.status === 'update' ? 'Get update' : t.status === 'installed' ? 'Open page' : 'Get';
+  const actions = el('div', { class: 'store-actions' },
+    el('button', { class: `btn small${t.status === 'installed' ? '' : ' primary'}`, text: label, onclick: open }));
+  if (t.installed) {
+    actions.append(el('button', {
+      class: 'btn small ghost',
+      text: 'Remove',
+      title: 'Delete this table from your PC',
+      onclick: async () => {
+        if (!(await confirmBox(`Remove ${t.title}? Its file is deleted from this PC. Mods already showing stay until you reopen the game.`, 'Remove'))) return;
+        if (await call(keystone.storeRemove(t.id))) toast(`Removed ${t.title}.`);
+      },
+    }));
+  }
+  return el('div', { class: `store-card${t.status === 'update' ? ' has-update' : ''}` }, tile,
+    el('p', { class: 'store-status', text: storeStatusLine(t) }), actions);
+}
+
+function renderStore() {
+  const d = state.store.data;
+  if (!d) return;
+  const q = state.store.q.trim().toLowerCase();
+  const f = state.store.filter;
+  for (const b of $('storeFilter').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.filter === f));
+  const site = Object.values(d.sites || {})[0];
+  $('storeLogin').textContent = site?.login || '';
+  $('storeLogin').hidden = !site?.login;
+  $('storeCheck').disabled = state.store.checking || !d.tables.some((t) => t.installed);
+  $('storeCheck').textContent = state.store.checking ? 'Checking…' : 'Check for updates';
+
+  const shown = d.tables
+    .filter((t) => !q || `${t.game} ${t.title} ${t.author || ''}`.toLowerCase().includes(q))
+    .filter((t) => f === 'all' || (f === 'installed' && t.installed) || (f === 'update' && t.status === 'update'))
+    // Updates first, then by game, keeping the catalog's order within a game.
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => (b.t.status === 'update') - (a.t.status === 'update') || a.t.game.localeCompare(b.t.game) || a.i - b.i)
+    .map(({ t }) => t);
+  $('storeGrid').replaceChildren(...shown.map(storeCard));
+  if (!shown.length) {
+    const why = q ? `No tables match "${state.store.q}".`
+      : f === 'installed' ? 'No tables installed yet. Pick one under All.'
+        : f === 'update' ? 'Everything you have is up to date.' : 'The store is empty.';
+    $('storeGrid').replaceChildren(el('p', { class: 'pop-note', text: why }));
+  }
+}
+
+function wireStore() {
+  $('storeSearch').addEventListener('input', (e) => { state.store.q = e.target.value; renderStore(); });
+  $('storeFilter').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-filter]');
+    if (!b) return;
+    state.store.filter = b.dataset.filter;
+    renderStore();
+  });
+  $('storeCheck').addEventListener('click', async () => {
+    state.store.checking = true;
+    renderStore();
+    const data = await call(keystone.storeCheck());
+    state.store.checking = false;
+    if (data) {
+      setStore(data);
+      toast(data.updates ? `${data.updates} table update${data.updates === 1 ? '' : 's'} available.` : 'Your tables are up to date.');
+    } else renderStore();
+  });
+  keystone.onStoreChanged(setStore);
+  keystone.onStoreNotice(({ text, kind }) => toast(text, kind));
+  keystone.onGoto((view) => go(view));
+}
+
 async function loadAppSettings() {
   const st = await call(keystone.appSettings());
   if (!st) return;
@@ -2416,6 +2534,7 @@ function wireAppSettings() {
 // ---------- wiring ----------
 function wire() {
   wireAppSettings();
+  wireStore();
   wireLibrary();
   wireCommands();
   $('noModsCommands').addEventListener('click', () => setTab('commands'));
@@ -2531,4 +2650,6 @@ function wire() {
   render();
   refreshProcesses();
   loadRemote();
+  // For the update badge on the sidebar.
+  loadStore();
 })();

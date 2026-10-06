@@ -88,6 +88,16 @@ document.addEventListener('keydown', (e) => {
 });
 
 browserApi.onNavigate(go);
+
+let noticeTimer = null;
+browserApi.onNotice(({ text, kind }) => {
+  $('noticeText').textContent = text;
+  $('notice').classList.toggle('bad', kind === 'error');
+  $('notice').hidden = false;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { $('notice').hidden = true; }, 12000);
+});
+$('noticeClose').addEventListener('click', () => { $('notice').hidden = true; });
 browserApi.appearance().then((r) => { if (r.ok) KeystoneTheme.applyAccent(r.data.accent); });
 browserApi.onAppearance((a) => KeystoneTheme.applyAccent(a.accent));
 

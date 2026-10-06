@@ -771,3 +771,18 @@ kbd {
 
 /* Cheat Engine scripts */
 .mod-name .now.failed { color: var(--danger); font-family: var(--font-body); white-space: normal; }
+
+/* ---- table store ---- */
+.store-intro { color: var(--body); max-width: 680px; margin: -8px 0 8px; }
+.store-login { color: var(--muted); font-size: 13px; max-width: 680px; margin: 0 0 18px; }
+.store-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.store-bar .home-filter { margin-bottom: 0; }
+.store-grid { grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); row-gap: 26px; }
+.store-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.store-card .tile-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }
+.store-card .tile-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-card.has-update .tile-art { box-shadow: 0 0 0 2px var(--accent-line); }
+.store-status { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.35; min-height: 2.7em; }
+.store-card.has-update .store-status { color: var(--accent); }
+.store-actions { display: flex; gap: 6px; margin-top: auto; }
+.store-actions .btn.primary { flex: 1; }

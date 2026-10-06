@@ -1,0 +1,37 @@
+{
+  "about": "The Tables tab. Each entry links to the creator's own page; Keystone never hosts the files. 'pack' is a folder under packs/. Authors are filled in from the page the first time it's opened, so they're optional here.",
+  "sites": {
+    "fearlessrevolution.com": {
+      "name": "FearLess Revolution",
+      "login": "FearLess only lets members download tables. The first time, log in (or make a free account) in the window that opens. Keystone's browser remembers it."
+    }
+  },
+  "tables": [
+    { "id": "fo4-main", "pack": "fallout-4", "title": "Fallout 4", "url": "https://fearlessrevolution.com/viewtopic.php?t=210" },
+    { "id": "fo4-1-10-163", "pack": "fallout-4", "title": "Fallout 4 1.10.163 CT", "url": "https://fearlessrevolution.com/viewtopic.php?t=15430", "note": "For the older 1.10.163 version (before the 2024 next-gen update)." },
+    { "id": "fo3-1-7", "pack": "fallout-3", "title": "Fallout 3 1.7.0.3", "url": "https://fearlessrevolution.com/viewtopic.php?t=7300" },
+    { "id": "fo3-table", "pack": "fallout-3", "title": "Fallout 3 table v1.0", "url": "https://fearlessrevolution.com/viewtopic.php?t=30321" },
+    { "id": "fnv-main", "pack": "fallout-new-vegas", "title": "Fallout New Vegas", "url": "https://fearlessrevolution.com/viewtopic.php?t=1033" },
+    { "id": "fnv-table", "pack": "fallout-new-vegas", "title": "Fallout: New Vegas table v1.0", "url": "https://fearlessrevolution.com/viewtopic.php?t=28664" },
+    { "id": "fos-main", "pack": "fallout-shelter", "title": "Fallout Shelter", "url": "https://fearlessrevolution.com/viewtopic.php?t=28217" },
+    { "id": "fos-table", "pack": "fallout-shelter", "title": "Fallout Shelter table v1.0", "url": "https://fearlessrevolution.com/viewtopic.php?t=30641" },
+    { "id": "fc3-table", "pack": "far-cry-3", "title": "Far Cry 3 table v2.0.4", "url": "https://fearlessrevolution.com/viewtopic.php?t=7811" },
+    { "id": "fc4-table", "pack": "far-cry-4", "title": "Far Cry 4 table v1.0.2", "url": "https://fearlessrevolution.com/viewtopic.php?t=8564" },
+    { "id": "fc4-compilation", "pack": "far-cry-4", "title": "Far Cry 4 v1.4 +27 compilation", "url": "https://fearlessrevolution.com/viewtopic.php?t=3378" },
+    { "id": "fc5-table", "pack": "far-cry-5", "title": "Far Cry 5 table v1.0.3", "url": "https://fearlessrevolution.com/viewtopic.php?t=8529" },
+    { "id": "fc5-new", "pack": "far-cry-5", "title": "Far Cry 5", "url": "https://fearlessrevolution.com/viewtopic.php?t=34090" },
+    { "id": "fc6-table", "pack": "far-cry-6", "title": "Far Cry 6 cheat table", "url": "https://fearlessrevolution.com/viewtopic.php?t=17719" },
+    { "id": "fcnd-table", "pack": "far-cry-new-dawn", "title": "Far Cry New Dawn table v1.0.13", "url": "https://fearlessrevolution.com/viewtopic.php?t=8731" },
+    { "id": "fcp-table", "pack": "far-cry-primal", "title": "Far Cry Primal table v1.0.1", "url": "https://fearlessrevolution.com/viewtopic.php?t=12246" },
+    { "id": "fcp-dunia", "pack": "far-cry-primal", "title": "Far Cry Primal: Dunia 2 cheats and more", "url": "https://fearlessrevolution.com/viewtopic.php?t=795" },
+    { "id": "fh4-main", "pack": "forza-horizon-4", "title": "Forza Horizon 4", "url": "https://fearlessrevolution.com/viewtopic.php?t=8065" },
+    { "id": "fh5-latest", "pack": "forza-horizon-5", "title": "Forza Horizon 5 (latest update)", "url": "https://fearlessrevolution.com/viewtopic.php?t=18114" },
+    { "id": "fh5-main", "pack": "forza-horizon-5", "title": "Forza Horizon 5", "url": "https://fearlessrevolution.com/viewtopic.php?t=18063" },
+    { "id": "fh6-main", "pack": "forza-horizon-6", "title": "Forza Horizon 6", "url": "https://fearlessrevolution.com/viewtopic.php?t=39428" },
+    { "id": "lsws-pbs", "pack": "lego-star-wars-skywalker-saga", "title": "Skywalker Saga v1.0 +32", "url": "https://fearlessrevolution.com/viewtopic.php?t=19855", "author": "xXPBSXx" },
+    { "id": "lsws-main", "pack": "lego-star-wars-skywalker-saga", "title": "LEGO Star Wars The Skywalker Saga", "url": "https://fearlessrevolution.com/viewtopic.php?t=19702" },
+    { "id": "lswcs-table", "pack": "lego-star-wars-complete-saga", "title": "The Complete Saga table v1.0", "url": "https://fearlessrevolution.com/viewtopic.php?t=28052" },
+    { "id": "lswcs-64", "pack": "lego-star-wars-complete-saga", "title": "The Complete Saga +64", "url": "https://fearlessrevolution.com/viewtopic.php?t=14074" },
+    { "id": "phasmo-main", "pack": "phasmophobia", "title": "Phasmophobia", "url": "https://fearlessrevolution.com/viewtopic.php?t=20675", "note": "Single-player only." }
+  ]
+}

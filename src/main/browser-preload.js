@@ -18,6 +18,11 @@ contextBridge.exposeInMainWorld('browserApi', {
   setOnTop: (on) => invoke('browser:onTop', on),
   setHome: (url) => invoke('browser:home', url),
   hide: () => invoke('browser:hide'),
+  onNotice: (cb) => {
+    const l = (_e, n) => cb(n);
+    ipcRenderer.on('browser:notice', l);
+    return () => ipcRenderer.removeListener('browser:notice', l);
+  },
   onNavigate: (cb) => {
     const l = (_e, url) => cb(url);
     ipcRenderer.on('browser:navigate', l);
