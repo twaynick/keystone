@@ -11,6 +11,8 @@ const { GameStore } = require('./store');
 const { loadPacks, findPack } = require('./packs');
 const { OverlayModel } = require('./overlay-model');
 const { CommandsModel } = require('./commands/model');
+const { FinderModel } = require('./finder');
+const { autoTables, folderName } = require('./tables');
 const { LibraryModel } = require('./library');
 const hotkeys = require('./hotkeys');
 const { InstalledGames, launchFor } = require('./installed');
@@ -23,7 +25,7 @@ const { IdentifyModel } = require('./identify');
 const MAX_PROFILE_NAME = 40;
 
 class Controller extends EventEmitter {
-  constructor({ packsDir, dataDir, commands = {}, installed = {}, clipboard = null }) {
+  constructor({ packsDir, dataDir, tablesDir = null, commands = {}, installed = {}, clipboard = null }) {
     super();
     // Electron's clipboard ({ readText, writeText }); Find me reads ARK's ccc
     // output from it. Injected so tests can fake it.
@@ -33,6 +35,11 @@ class Controller extends EventEmitter {
     this.packsDir = packsDir;
     // Bundled packs, plus a folder where users can drop their own.
     this.userPacksDir = path.join(dataDir, 'packs');
+    // Tables that load by themselves (tables.js): shipped next to the packs,
+    // and a per-PC folder of your own.
+    this.tablesDir = tablesDir || path.join(packsDir, '..', 'tables');
+    this.userTablesDir = path.join(dataDir, 'tables');
+    this.autoLoaded = [];
     this.store = new GameStore(dataDir);
     this.session = null;
     this.game = null;
@@ -40,6 +47,7 @@ class Controller extends EventEmitter {
     this.modsError = null;
     this.overlay = new OverlayModel(this, { dataDir });
     this.commands = new CommandsModel(this, commands);
+    this.finder = new FinderModel(this);
     this.library = new LibraryModel(this, { dataDir });
     this.identify = new IdentifyModel(this);
     this.installed = new InstalledGames(installed);
@@ -256,6 +264,14 @@ class Controller extends EventEmitter {
     if (this.pack?.table) {
       try { this._loadTable(this.pack.table, { remember: false }); } catch (err) { notices.push(`${this.pack.name} pack: ${err.message}`); }
     }
+    // Bundled and personal tables for this game, with their credits.
+    this.autoLoaded = [];
+    for (const t of autoTables({ bundledDir: this.tablesDir, userDir: this.userTablesDir }, this.pack, this.game)) {
+      try {
+        this._loadTable(t.file, { remember: false });
+        this.autoLoaded.push({ name: t.name, source: t.source, author: t.author, url: t.url, note: t.note });
+      } catch (err) { notices.push(`${t.name}: ${err.message}`); }
+    }
     // Reload the tables used last time, then the active profile. Order
     // matters: profile toggles point at record ids that only exist once the
     // tables are loaded.
@@ -264,9 +280,12 @@ class Controller extends EventEmitter {
       if (!fs.existsSync(t)) { notices.push(`Couldn't find ${path.basename(t)} any more, so it wasn't reloaded.`); continue; }
       try { this._loadTable(t, { remember: false }); } catch (err) { notices.push(`${path.basename(t)}: ${err.message}`); }
     }
+    // Mods made with the value finder, before the profile: it may use them.
+    try { this.finder.load(); } catch (err) { notices.push(`My mods: ${err.message}`); }
     if (saved.autoApply && saved.activeProfile && saved.profiles[saved.activeProfile]) {
-      const { skipped } = session.importToggles(saved.profiles[saved.activeProfile].toggles);
+      const { skipped, failed } = session.importToggles(saved.profiles[saved.activeProfile].toggles);
       notices.push(`Applied profile "${saved.activeProfile}".`);
+      for (const f of failed || []) notices.push(f);
       if (skipped.length) notices.push(`${skipped.length} saved mods aren't in the loaded tables and were skipped.`);
     }
   }
@@ -327,6 +346,14 @@ class Controller extends EventEmitter {
     this._watch = null;
   }
 
+  // This game's personal tables folder (created on first use), for "Tables folder".
+  userTablesFolder() {
+    if (!this.game) throw new Error('Choose a game first.');
+    const dir = path.join(this.userTablesDir, folderName(this.pack, this.game));
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
   loadTableFile(filePath) {
     const records = this._loadTable(filePath, { remember: true });
     return { snapshot: this.snapshot(), summary: summarize(records, path.basename(filePath)) };
@@ -359,7 +386,7 @@ class Controller extends EventEmitter {
   setHotkey(id, accel) {
     const s = this._requireSession();
     const rec = s.getRecord(id);
-    if (!rec || rec.kind !== 'value') throw new Error('Only mods with a value can have a hotkey.');
+    if (!rec || (rec.kind !== 'value' && rec.kind !== 'script')) throw new Error('Only mods that can be switched can have a hotkey.');
     const clean = accel ? hotkeys.normalize(accel) : null;
     const d = this.store.load(this.game.key);
     if (clean) {
@@ -411,8 +438,12 @@ class Controller extends EventEmitter {
   quickAction(id) {
     const s = this._requireSession();
     const rec = s.getRecord(id);
-    if (!rec || rec.kind !== 'value') throw new Error('That mod can\u2019t be switched.');
+    if (!rec || (rec.kind !== 'value' && rec.kind !== 'script')) throw new Error('That mod can\u2019t be switched.');
     const st = s.state.get(id);
+    if (rec.kind === 'script') {
+      s.setEnabled(id, !st.enabled);
+      return { label: this._label(rec), state: st.enabled ? 'On' : 'Off' };
+    }
     const ui = this.pack?.modsUi?.[rec.groupPath.concat(rec.name).join('/')] || {};
     const label = ui.label || rec.name;
     if (ui.control === 'apply') {
@@ -453,10 +484,10 @@ class Controller extends EventEmitter {
     const data = this.store.load(this.game.key);
     const profile = data.profiles[name];
     if (!profile) throw new Error(`No profile named "${name}".`);
-    const { skipped } = s.importToggles(profile.toggles);
+    const { skipped, failed } = s.importToggles(profile.toggles);
     this.store.update(this.game.key, (d) => { d.activeProfile = name; });
     this.emit('structure', this.snapshot());
-    return { skipped: skipped.length };
+    return { skipped: skipped.length, failed };
   }
 
   deleteProfile(name) {
@@ -542,6 +573,8 @@ class Controller extends EventEmitter {
       modsBlocked: this.modsBlocked(),
       offlineOnly: Boolean(this.pack?.offlineOnly),
       offlineNote: this.pack?.offlineNote || null,
+      // Tables that loaded by themselves, with who made them.
+      autoTables: this.session ? this.autoLoaded : [],
       profiles: this.profileSummary(),
       pack: this.pack ? this.pack.name : null,
       packId: this.pack ? this.pack.id : null,

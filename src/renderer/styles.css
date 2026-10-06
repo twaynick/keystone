@@ -731,3 +731,43 @@ kbd {
 .gh-ev .chip { display: inline-block; height: auto; line-height: 1.5; border: 0; }
 
 .cat-code { font: 600 12px var(--font-mono); color: var(--accent); letter-spacing: 0.06em; }
+
+/* ---- value finder ---- */
+.finder { margin: 0 0 18px; }
+.finder-how { margin: 0 0 16px; padding-left: 20px; color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+.finder-how strong { color: var(--text); font-weight: 600; }
+.finder-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.finder-field { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 12.5px; }
+.finder-field .field { height: 38px; min-width: 150px; }
+#fVal, #fVal2 { width: 150px; font: 600 15px var(--font-mono); }
+.finder-buttons { display: flex; gap: 8px; margin-left: auto; }
+.finder-buttons .btn { height: 38px; }
+.finder-status { display: flex; align-items: center; gap: 12px; margin-top: 16px; color: var(--muted); font-size: 13px; }
+.finder-bar { flex: 0 0 220px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.finder-bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.15s; }
+.finder-status.idle .finder-bar { display: none; }
+.finder-results { margin-top: 12px; }
+.finder-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.finder-table th { text-align: left; font-weight: 500; color: var(--faint); font-size: 12px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.finder-table td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.finder-table td.mono { font-family: var(--font-mono); }
+.finder-table td.where { color: var(--muted); }
+.finder-table .tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 9px; font: 500 11px var(--font-body); }
+.finder-table .tag.keep { background: var(--accent-wash); color: var(--accent); }
+.finder-table .tag.temp { background: rgba(255, 255, 255, 0.06); color: var(--muted); }
+.finder-table td.act { text-align: right; white-space: nowrap; }
+.finder-table td.act .field { height: 32px; width: 170px; margin-right: 6px; }
+.finder-table td.act .btn { height: 32px; }
+.finder-table tr.changed td.now { color: var(--accent); }
+.finder-mine { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
+.finder-mine h3 { margin: 0; font: 600 15px var(--font-display); }
+.finder-mine code { font-family: var(--font-mono); font-size: 12.5px; }
+.mod-name .temp-note { color: var(--faint); font-size: 11.5px; }
+
+/* Who made the tables that loaded by themselves */
+.table-credits { margin: 18px 12px 4px; color: var(--faint); font-size: 12.5px; line-height: 1.6; }
+.table-credits a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.table-credits a:hover { color: var(--text); }
+
+/* Cheat Engine scripts */
+.mod-name .now.failed { color: var(--danger); font-family: var(--font-body); white-space: normal; }

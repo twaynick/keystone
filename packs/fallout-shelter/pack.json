@@ -1,0 +1,212 @@
+{
+  "name": "Fallout Shelter",
+  "exe": [
+    "FalloutShelter.exe"
+  ],
+  "art": {
+    "steamAppId": 588430
+  },
+  "info": [
+    {
+      "title": "Library",
+      "body": "Every dweller, weapon, outfit and pet in Fallout Shelter (100 dwellers, 249 weapons, 179 outfits, 62 pets) and all 28 rooms, with pictures and links to Nukapedia."
+    },
+    {
+      "title": "Back up your vault first",
+      "body": "Fallout Shelter saves to %LOCALAPPDATA%\\FalloutShelter (Vault1.sav to Vault3.sav). Copy that folder before using mods: a value set too high can break a save, and with cloud saves on, a broken vault can sync to your other devices."
+    },
+    {
+      "title": "Overlay",
+      "body": "Run the game in a window rather than fullscreen for the overlay and Keystone's browser to show on top."
+    }
+  ],
+  "library": {
+    "catalogs": {
+      "dwellers": "dwellers.json",
+      "weapons": "weapons.json",
+      "outfits": "outfits.json",
+      "pets": "pets.json",
+      "rooms": "rooms.json"
+    },
+    "sections": [
+      {
+        "id": "dwellers",
+        "label": "Dwellers",
+        "catalog": "dwellers",
+        "idLabel": "ID"
+      },
+      {
+        "id": "weapons",
+        "label": "Weapons",
+        "catalog": "weapons",
+        "idLabel": "ID"
+      },
+      {
+        "id": "outfits",
+        "label": "Outfits",
+        "catalog": "outfits",
+        "idLabel": "ID"
+      },
+      {
+        "id": "pets",
+        "label": "Pets",
+        "catalog": "pets",
+        "idLabel": "ID"
+      },
+      {
+        "id": "rooms",
+        "label": "Rooms",
+        "catalog": "rooms",
+        "idLabel": "ID"
+      }
+    ],
+    "guides": "guides",
+    "wiki": {
+      "label": "Nukapedia",
+      "base": "https://fallout.fandom.com"
+    },
+    "links": [
+      {
+        "label": "Fallout Shelter on Nukapedia",
+        "url": "https://fallout.fandom.com/wiki/Fallout_Shelter"
+      }
+    ],
+    "images": {
+      "api": "https://fallout.fandom.com/api.php",
+      "credit": "Pictures from Nukapedia, the Fallout Wiki on Fandom",
+      "creditUrl": "https://fallout.fandom.com/",
+      "catalogs": {
+        "dwellers": {
+          "thumb": [
+            "File:{img}",
+            "{page}",
+            "{name} (Fallout Shelter)",
+            "{name}"
+          ],
+          "hero": [
+            "File:{img}",
+            "{page}",
+            "{name} (Fallout Shelter)",
+            "{name}"
+          ]
+        },
+        "weapons": {
+          "thumb": [
+            "File:{img}",
+            "{page}",
+            "{name} (Fallout Shelter)",
+            "{name}"
+          ],
+          "hero": [
+            "File:{img}",
+            "{page}",
+            "{name} (Fallout Shelter)",
+            "{name}"
+          ]
+        },
+        "outfits": {
+          "thumb": [
+            "File:{img}",
+            "{page}",
+            "{name} (Fallout Shelter)",
+            "{name}"
+          ],
+          "hero": [
+            "File:{img}",
+            "{page}",
+            "{name} (Fallout Shelter)",
+            "{name}"
+          ]
+        },
+        "pets": {
+          "thumb": [
+            "File:{img}",
+            "{page}",
+            "{name} (Fallout Shelter)",
+            "{name}"
+          ],
+          "hero": [
+            "File:{img}",
+            "{page}",
+            "{name} (Fallout Shelter)",
+            "{name}"
+          ]
+        },
+        "rooms": {
+          "thumb": [
+            "File:{img}",
+            "{page}",
+            "{name} (Fallout Shelter)",
+            "{name}"
+          ],
+          "hero": [
+            "File:{img}",
+            "{page}",
+            "{name} (Fallout Shelter)",
+            "{name}"
+          ]
+        }
+      }
+    }
+  },
+  "checklists": [
+    {
+      "name": "Legendary dwellers",
+      "items": [
+        "Abraham Washington",
+        "Allistair Tenpenny",
+        "Amata",
+        "Betty",
+        "Bittercup",
+        "Butch",
+        "Chet",
+        "Colonel Autumn",
+        "Confessor Cromwell",
+        "Conrad Kellogg",
+        "Cooper Howard",
+        "Desdemona",
+        "Dr. Henry",
+        "Dr. Li",
+        "Ed the Ghoul",
+        "Elder Lyons",
+        "Eulogy Jones",
+        "Hank",
+        "Hank (New Vegas)",
+        "Harkness",
+        "James",
+        "Jericho",
+        "Legate",
+        "Liam Binet",
+        "Luc the Human",
+        "Lucas Simms",
+        "Lucy",
+        "Lucy (New Vegas)",
+        "Ma June",
+        "Maximus",
+        "Moira Brown",
+        "Moldaver",
+        "Mr. Burke",
+        "Mr. House",
+        "Nick Valentine",
+        "Norm",
+        "Old Longfellow",
+        "Paladin",
+        "Paladin Danse",
+        "Piper",
+        "Preston Garvey",
+        "Regs",
+        "Sarah Lyons",
+        "Scribe Rothchild",
+        "Scribe Valdez",
+        "Snake Oil Salesman",
+        "Star Paladin Cross",
+        "Stephanie",
+        "The Ghoul",
+        "The Ghoul (New Vegas)",
+        "Three Dog",
+        "Wilzig",
+        "76 Overseer"
+      ]
+    }
+  ]
+}

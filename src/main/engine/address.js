@@ -81,17 +81,21 @@ function symbolsOf(tree, out = []) {
 
 const MASK64 = (1n << 64n) - 1n;
 
-function evaluate(tree, mem) {
+// symbols: names Cheat Engine scripts registered (registersymbol), like
+// "pPlayer" set by a "Get player pointer" script.
+function evaluate(tree, mem, symbols) {
   switch (tree.op) {
     case 'num': return tree.v;
     case 'sym': {
       const mod = mem.getModule(tree.v);
-      if (!mod) throw new AddressError(`Module or symbol "${tree.v}" not found`);
-      return mod.base;
+      if (mod) return BigInt(mod.base);
+      const reg = symbols?.get(String(tree.v).toLowerCase());
+      if (reg !== undefined) return reg;
+      throw new AddressError(tree.v.includes('.') ? `Module "${tree.v}" not found` : `Turn on the script that sets up "${tree.v}" first`);
     }
-    case '+': return (evaluate(tree.a, mem) + evaluate(tree.b, mem)) & MASK64;
-    case '-': return (evaluate(tree.a, mem) - evaluate(tree.b, mem)) & MASK64;
-    case 'deref': return readPointer(mem, evaluate(tree.a, mem));
+    case '+': return (evaluate(tree.a, mem, symbols) + evaluate(tree.b, mem, symbols)) & MASK64;
+    case '-': return (evaluate(tree.a, mem, symbols) - evaluate(tree.b, mem, symbols)) & MASK64;
+    case 'deref': return readPointer(mem, evaluate(tree.a, mem, symbols));
     default: throw new AddressError(`Bad node ${tree.op}`);
   }
 }
@@ -105,9 +109,9 @@ function readPointer(mem, addr) {
 // Final address of a record: evaluate the base expression, then walk offsets.
 // `offsets` are in application order (first applied first) — the CT parser
 // already reversed CE's on-disk order.
-function resolve(record, mem) {
+function resolve(record, mem, symbols) {
   if (!record._tree) record._tree = parse(record.address);
-  let addr = evaluate(record._tree, mem);
+  let addr = evaluate(record._tree, mem, symbols);
   for (const off of record.offsets || []) {
     const p = readPointer(mem, addr);
     // A null pointer mid-chain is the normal state during loading screens.

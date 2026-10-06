@@ -3,14 +3,15 @@
 const { XMLParser } = require('fast-xml-parser');
 const { CE_TYPE_MAP } = require('./values');
 const address = require('./address');
+const { unsupportedReason } = require('./autoasm');
 
 // Parses a Cheat Engine .CT table into Keystone's flat record list.
 //
 // Record kinds:
 //   group  – a header (CE "GroupHeader" or any entry that only holds children)
 //   value  – a plain address/pointer with a numeric type: fully supported
-//   script – an Auto Assembler script: listed but not runnable (needs CE's assembler)
-//   unsupported – strings, AOBs, custom types, or unresolvable symbols
+//   script – an Auto Assembler script, run by autoasm.js when switched on
+//   unsupported – strings, AOBs, custom types, or scripts using Lua
 
 const parser = new XMLParser({
   ignoreAttributes: true,
@@ -58,7 +59,10 @@ function toRecord(e, id, name, groupPath) {
   const ceType = String(e.VariableType || '').trim();
 
   if (e.AssemblerScript || ceType.toLowerCase() === 'auto assembler script') {
-    return { ...base, kind: 'script', reason: 'Auto Assembler script — needs Cheat Engine to run' };
+    const script = String(e.AssemblerScript || '');
+    const why = unsupportedReason(script);
+    if (why) return { ...base, kind: 'unsupported', reason: `Script: ${why}` };
+    return { ...base, kind: 'script', script };
   }
 
   const valueType = CE_TYPE_MAP[ceType.toLowerCase()];
@@ -86,12 +90,9 @@ function toRecord(e, id, name, groupPath) {
 
   const addr = String(e.Address).trim();
   try {
-    const syms = address.symbolsOf(address.parse(addr));
-    // A symbol without a dot isn't a module; it was registered by a CE script.
-    const scriptSym = syms.find((s) => !s.includes('.'));
-    if (scriptSym) {
-      return { ...base, kind: 'unsupported', reason: `Uses "${scriptSym}", which a CE script defines` };
-    }
+    // Symbols without a dot aren't modules: a script registers them, and the
+    // value reads once that script is on.
+    address.parse(addr);
   } catch (err) {
     return { ...base, kind: 'unsupported', reason: err.message };
   }

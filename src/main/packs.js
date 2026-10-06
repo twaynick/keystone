@@ -65,7 +65,9 @@ function normalize(raw, folder, id) {
     folder,
     name: String(raw.name || id),
     exe: (Array.isArray(raw.exe) ? raw.exe : [raw.exe]).filter(Boolean).map((e) => String(e).toLowerCase()),
-    table: rel(raw.table),
+    // A pack can ship mods as a table: named in pack.json, or a mods.ct
+    // dropped in its folder (what the value finder's "Share" saves).
+    table: rel(raw.table) || (fs.existsSync(path.join(folder, 'mods.ct')) ? path.join(folder, 'mods.ct') : null),
     map: raw.map?.image ? { image: rel(raw.map.image), bounds: raw.map.bounds || null } : null,
     position: raw.position || null,
     waypoints: Array.isArray(raw.waypoints) ? raw.waypoints : [],

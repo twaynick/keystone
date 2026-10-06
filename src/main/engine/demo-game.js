@@ -12,12 +12,25 @@
 //   Player+0x30/34/38 float X/Y/Z   Player+0x3C float yaw (degrees)
 //   Player+0x40               -> pointer to Inventory (heap+0x800)
 //   Inventory+0x08 int32 wood   Inventory+0x0C int32 stone
+//   demo.exe+0x1000 "code" that takes damage, demo.exe+0x1100 "code" that
+//                     uses a bullet. The demo can't run machine code, so it
+//                     checks whether those bytes are still the originals:
+//                     a script that patches them (the demo table's God mode
+//                     and Infinite ammo) switches the damage or ammo use off.
+//   demo.exe+0x3000 int32 day   (a value in the game's own static memory,
+//                                so the value finder has one that keeps its
+//                                address across restarts)
 
 const MODULE_BASE = 0x140000000n;
 const HEAP_BASE = 0x20000000n;
 const PLAYER = HEAP_BASE + 0x100n;
 const INVENTORY = HEAP_BASE + 0x800n;
 const PLAYER_PTR = MODULE_BASE + 0x2000n;
+const DAY = MODULE_BASE + 0x3000n;
+// subss xmm0,xmm1 / movss [rdi+10],xmm0
+const HURT_CODE = Buffer.from('f30f5cc1f30f114710', 'hex');
+// dec dword ptr [rdi+18] / mov rcx,[rbx+08]
+const AMMO_CODE = Buffer.from('ff4f18488b4b08', 'hex');
 
 const P = { health: 0x10, stamina: 0x14, ammo: 0x18, gold: 0x1c, x: 0x30, y: 0x34, z: 0x38, yaw: 0x3c, inv: 0x40 };
 const I = { wood: 0x08, stone: 0x0c };
@@ -27,7 +40,7 @@ class DemoGame {
     this.pointerSize = 8;
     this.pid = 0;
     this.name = 'demo.exe';
-    this.regions = [
+    this.blocks = [
       { base: MODULE_BASE, buf: Buffer.alloc(0x10000) },
       { base: HEAP_BASE, buf: Buffer.alloc(0x10000) },
     ];
@@ -49,6 +62,10 @@ class DemoGame {
     this._i(PLAYER, P.gold, 250);
     this._i(INVENTORY, I.wood, 40);
     this._i(INVENTORY, I.stone, 12);
+    this._i(MODULE_BASE, 0x3000, 1);
+    HURT_CODE.copy(this.blocks[0].buf, 0x1000);
+    AMMO_CODE.copy(this.blocks[0].buf, 0x1100);
+    this.nextAlloc = MODULE_BASE + 0x100000n;
 
     this._timer = tickMs > 0 ? setInterval(() => this.step(tickMs), tickMs) : null;
     if (this._timer?.unref) this._timer.unref();
@@ -64,14 +81,17 @@ class DemoGame {
     const loading = this.loadingEveryMs > 0 && (this.t % this.loadingEveryMs) < this.loadingForMs && this.t > this.loadingForMs;
     this._writePtr(PLAYER_PTR, loading ? 0n : PLAYER);
 
-    const hp = this._rf(PLAYER, P.health) - 2.5 * (ms / 1000) * 4;
+    const hurts = this.read(MODULE_BASE + 0x1000n, HURT_CODE.length).equals(HURT_CODE);
+    const hp = this._rf(PLAYER, P.health) - (hurts ? 2.5 * (ms / 1000) * 4 : 0);
     this._f(PLAYER, P.health, hp <= 0 ? 100 : hp);
     this._f(PLAYER, P.stamina, 50 + 50 * Math.sin(s * 0.8));
 
     if (Math.floor(this.t / 600) !== Math.floor((this.t - ms) / 600)) {
-      const ammo = this._ri(PLAYER, P.ammo) - 1;
+      const shoots = this.read(MODULE_BASE + 0x1100n, AMMO_CODE.length).equals(AMMO_CODE);
+      const ammo = this._ri(PLAYER, P.ammo) - (shoots ? 1 : 0);
       this._i(PLAYER, P.ammo, ammo < 0 ? 30 : ammo);
     }
+    if (Math.floor(this.t / 10000) !== Math.floor((this.t - ms) / 10000)) this._i(MODULE_BASE, 0x3000, this._ri(MODULE_BASE, 0x3000) + 1);
     if (Math.floor(this.t / 2000) !== Math.floor((this.t - ms) / 2000)) {
       this._i(PLAYER, P.gold, this._ri(PLAYER, P.gold) + 5);
       this._i(INVENTORY, I.wood, this._ri(INVENTORY, I.wood) + 1);
@@ -101,6 +121,32 @@ class DemoGame {
   }
 
   // ---- backend interface ----
+  regions() { return this.blocks.map((r) => ({ base: r.base, size: r.buf.length })); }
+
+  readableRegions(start = 0n, end = null) {
+    const out = [];
+    for (const r of this.blocks) {
+      const from = r.base < start ? start : r.base;
+      const top = r.base + BigInt(r.buf.length);
+      const to = end !== null && end < top ? end : top;
+      if (to > from) out.push({ base: from, size: Number(to - from) });
+    }
+    return out;
+  }
+
+  // Code caves for scripts: a new block after the module, like Windows
+  // would hand out near it.
+  alloc(size) {
+    const base = this.nextAlloc;
+    const len = Math.ceil(size / 4096) * 4096;
+    this.blocks.push({ base, buf: Buffer.alloc(len) });
+    this.nextAlloc += BigInt(Math.max(len, 0x10000));
+    return base;
+  }
+
+  free(addr) { this.blocks = this.blocks.filter((b) => b.base !== addr || b.base === MODULE_BASE || b.base === HEAP_BASE); }
+  protect() { return 0x40; }
+  flush() {}
   getModule(name) { return this.modules.get(String(name).toLowerCase()) || null; }
   refreshModules() {}
 
@@ -128,7 +174,7 @@ class DemoGame {
 
   // ---- helpers ----
   _region(addr, size) {
-    for (const r of this.regions) {
+    for (const r of this.blocks) {
       if (addr >= r.base && addr + BigInt(size) <= r.base + BigInt(r.buf.length)) return r;
     }
     return null;
@@ -140,4 +186,4 @@ class DemoGame {
   _ri(base, off) { return this.read(base + BigInt(off), 4).readInt32LE(0); }
 }
 
-module.exports = { DemoGame, MODULE_BASE, HEAP_BASE, PLAYER, INVENTORY };
+module.exports = { DemoGame, MODULE_BASE, HEAP_BASE, PLAYER, INVENTORY, DAY, HURT_CODE, AMMO_CODE };

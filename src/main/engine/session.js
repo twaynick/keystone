@@ -3,6 +3,7 @@
 const { EventEmitter } = require('events');
 const address = require('./address');
 const values = require('./values');
+const { ScriptRunner } = require('./autoasm');
 
 // One attached game: its memory backend, the loaded mod records, and the
 // per-record state (frozen or not, target value, last read value).
@@ -31,6 +32,9 @@ class Session extends EventEmitter {
     this.state = new Map();
     this.tables = [];
     this._timers = [];
+    // Names Cheat Engine scripts register, which other mods' addresses use.
+    this.symbols = new Map();
+    this.scripts = new ScriptRunner(memory, this.symbols);
   }
 
   get gameKey() {
@@ -51,7 +55,20 @@ class Session extends EventEmitter {
 
   close() {
     this.stop();
+    // Leave the game as it was: scripts patch its code, and a patch with
+    // nothing managing it any more (Keystone closing, switching games)
+    // could crash it later, e.g. a jump into a code cave that gets freed.
+    try { if (this.memory.isAlive()) this.disableScripts(); } catch { /* game gone */ }
     try { this.memory.close(); } catch { /* already gone */ }
+  }
+
+  // Turns off every script that's on, newest first. Best effort.
+  disableScripts() {
+    const on = this.records.filter((r) => r.kind === 'script' && this.state.get(r.id)?.enabled).reverse();
+    for (const r of on) {
+      try { this.scripts.run(r.id, r.script, 'disable'); } catch { /* keep going */ }
+      this.state.get(r.id).enabled = false;
+    }
   }
 
   // Adds a table's records. Re-loading the same table replaces its old records
@@ -65,6 +82,7 @@ class Session extends EventEmitter {
     this.records.push(...records);
     for (const r of records) {
       if (r.kind === 'value') this.state.set(r.id, { enabled: false, target: null, current: null, status: 'pending', error: null });
+      if (r.kind === 'script') this.state.set(r.id, { enabled: false, target: null, current: null, status: null, error: null });
     }
     if (tableName && !this.tables.includes(tableName)) this.tables.push(tableName);
     this.readTick();
@@ -76,6 +94,7 @@ class Session extends EventEmitter {
   }
 
   setEnabled(id, enabled) {
+    if (this.getRecord(id)?.kind === 'script') return this._setScript(id, enabled);
     const rec = this._valueRecord(id);
     const st = this.state.get(id);
     if (enabled && (st.target === null || st.target === undefined)) {
@@ -87,6 +106,28 @@ class Session extends EventEmitter {
     }
     st.enabled = Boolean(enabled);
     if (st.enabled) this._write(rec, st.target);
+    this.emit('structure');
+  }
+
+  // Runs a script's [ENABLE] or [DISABLE] section. A failure leaves the
+  // game untouched (autoasm undoes partial writes) and shows on the mod.
+  _setScript(id, enabled) {
+    const rec = this.getRecord(id);
+    const st = this.state.get(id);
+    const on = Boolean(enabled);
+    if (st.enabled === on) return;
+    try {
+      this.scripts.run(id, rec.script, on ? 'enable' : 'disable');
+      st.enabled = on;
+      st.status = 'ok';
+      st.error = null;
+    } catch (err) {
+      st.status = 'error';
+      st.error = err.message;
+      this.emit('structure');
+      throw new Error(`"${rec.name}" didn't turn ${on ? 'on' : 'off'}: ${err.message}`);
+    }
+    this.readTick();
     this.emit('structure');
   }
 
@@ -127,18 +168,32 @@ class Session extends EventEmitter {
   // skipped and reported rather than failing the whole profile.
   importToggles(toggles, { replace = true } = {}) {
     const skipped = [];
-    if (replace) {
-      for (const st of this.state.values()) { st.enabled = false; st.target = null; }
+    const failed = [];
+    const want = toggles || {};
+    // Scripts first, in table order: values often read through a symbol a
+    // script registers. Scripts not in the profile turn off when replacing.
+    for (const rec of this.records) {
+      if (rec.kind !== 'script') continue;
+      const on = Boolean(want[rec.id]?.enabled);
+      if (!on && !replace) continue;
+      try { this._setScript(rec.id, on); } catch (err) { failed.push(err.message); }
     }
-    for (const [id, t] of Object.entries(toggles || {})) {
+    if (replace) {
+      for (const [id, st] of this.state) {
+        if (this.getRecord(id)?.kind === 'script') continue;
+        st.enabled = false; st.target = null;
+      }
+    }
+    for (const [id, t] of Object.entries(want)) {
       const st = this.state.get(id);
       if (!st) { skipped.push(id); continue; }
+      if (this.getRecord(id)?.kind === 'script') continue;
       st.target = t.target ?? null;
       st.enabled = Boolean(t.enabled) && st.target !== null;
     }
     this.freezeTick();
     this.emit('structure');
-    return { skipped };
+    return { skipped, failed };
   }
 
   freezeTick() {
@@ -159,7 +214,7 @@ class Session extends EventEmitter {
       if (rec.kind !== 'value') continue;
       const st = this.state.get(rec.id);
       try {
-        const addr = address.resolve(rec, this.memory);
+        const addr = address.resolve(rec, this.memory, this.symbols);
         const buf = this.memory.read(addr, values.sizeOf(rec.valueType));
         if (!buf) throw new address.AddressError('Unreadable address');
         st.current = values.decode(rec.valueType, buf);
@@ -192,6 +247,8 @@ class Session extends EventEmitter {
           current: st?.current ?? null,
           status: st?.status || null,
           error: st?.error || null,
+          // Value-finder mods on an address that changes every run.
+          ...(r.sessionOnly ? { sessionOnly: true } : {}),
         };
       }),
     };
@@ -212,7 +269,7 @@ class Session extends EventEmitter {
 
   _read(rec) {
     try {
-      const addr = address.resolve(rec, this.memory);
+      const addr = address.resolve(rec, this.memory, this.symbols);
       const buf = this.memory.read(addr, values.sizeOf(rec.valueType));
       return buf ? values.decode(rec.valueType, buf) : null;
     } catch {
@@ -222,7 +279,7 @@ class Session extends EventEmitter {
 
   _write(rec, value) {
     try {
-      const addr = address.resolve(rec, this.memory);
+      const addr = address.resolve(rec, this.memory, this.symbols);
       return this.memory.write(addr, values.encode(rec.valueType, value));
     } catch {
       // Unresolvable right now (loading screen); the next tick retries.

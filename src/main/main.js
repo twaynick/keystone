@@ -175,6 +175,13 @@ function createController() {
   controller.on('values', (v) => send('session:values', v));
   controller.on('detached', (info) => send('session:detached', info));
   controller.on('commands', () => send('commands:info', controller.commands.info()));
+  // Value finder: progress at most ~8 times a second; results when a scan ends.
+  let finderAt = 0;
+  controller.on('finder', (why) => {
+    if (why === 'progress' && Date.now() - finderAt < 120) return;
+    finderAt = Date.now();
+    send('finder:info', controller.finder.info());
+  });
   controller.on('structure', () => send('commands:info', controller.commands.info()));
 
   settings = new Settings(app.getPath('userData'));
@@ -312,6 +319,32 @@ handle('table:open', async () => {
   });
   if (res.canceled || !res.filePaths[0]) return null;
   return controller.loadTableFile(res.filePaths[0]);
+});
+// Value finder and My mods
+handle('finder:info', () => controller.finder.info());
+handle('finder:first', (opts) => controller.finder.first(opts || {}));
+handle('finder:next', (opts) => controller.finder.next(opts || {}));
+handle('finder:undo', () => controller.finder.undo());
+handle('finder:reset', () => controller.finder.reset());
+handle('finder:cancel', () => controller.finder.cancel());
+handle('finder:addMod', (m) => controller.finder.addMod(m || {}));
+handle('finder:renameMod', (id, name) => controller.finder.renameMod(String(id), name));
+handle('finder:removeMod', (id) => controller.finder.removeMod(String(id)));
+handle('finder:export', async () => {
+  controller.finder.tableXml(); // says so before the dialog if there's nothing to share
+  const res = await dialog.showSaveDialog(mainWindow, {
+    title: 'Share your mods as a table',
+    defaultPath: controller.finder.suggestedFileName(),
+    filters: [{ name: 'Cheat Engine table', extensions: ['ct'] }],
+  });
+  if (res.canceled || !res.filePath) return null;
+  return controller.finder.exportTable(res.filePath);
+});
+handle('tables:openFolder', async () => {
+  const dir = controller.userTablesFolder();
+  const err = await shell.openPath(dir);
+  if (err) throw new Error(err);
+  return dir;
 });
 handle('profile:save', (name, opts) => controller.saveProfile(name, opts));
 handle('profile:apply', (name) => controller.applyProfile(name));

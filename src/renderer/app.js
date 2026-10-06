@@ -28,6 +28,7 @@ const state = {
   games: [],
   lib: { info: null, page: { kind: 'home' }, entries: {}, filters: {}, searchTimer: null },
   cmd: { info: null, seg: null, catalogs: {}, filters: { q: '', category: '', map: '' }, selected: null, action: {}, values: {} },
+  finder: { open: false, info: null, rowsKey: '', editing: null },
 };
 
 // Row elements by record id, so live value updates (4×/s) patch text in place
@@ -292,7 +293,10 @@ function renderModsPane(snap) {
     const on = snap.modsBlocked !== 'offline-off';
     for (const b of $('modsSwitch').querySelectorAll('button')) b.setAttribute('aria-pressed', String((b.dataset.v === 'on') === on));
   }
-  $('emptyNoTable').hidden = !snap.mods || hasMods;
+  // The value finder replaces the "no mods yet" message while it's open.
+  const finderOpen = Boolean(snap.mods && state.finder.open);
+  $('finderPanel').hidden = !finderOpen;
+  $('emptyNoTable').hidden = !snap.mods || hasMods || finderOpen;
   $('emptyNoMods').hidden = snap.mods;
   if (!snap.mods) {
     const offline = snap.game.offline;
@@ -305,7 +309,244 @@ function renderModsPane(snap) {
     $('noModsCommands').hidden = !snap.hasCommands;
   }
   $('modsView').hidden = !hasMods;
-  if (hasMods) { renderMods(); renderProfiles(); }
+  if (hasMods) { renderMods(); renderProfiles(); renderTableCredits(snap.autoTables || []); }
+}
+
+// "Tables: Fallout 4 by Someone (link) · My table (yours)" under the mods.
+function renderTableCredits(list) {
+  const p = $('tableCredits');
+  p.hidden = !list.length;
+  if (!list.length) return;
+  const parts = [];
+  list.forEach((t, i) => {
+    if (i) parts.push(document.createTextNode(' · '));
+    parts.push(document.createTextNode(t.name));
+    if (t.author) {
+      parts.push(document.createTextNode(' by '));
+      if (t.url) {
+        const a = el('a', { text: t.author, title: t.url });
+        a.addEventListener('click', () => call(keystone.openBrowser(t.url)));
+        parts.push(a);
+      } else parts.push(document.createTextNode(t.author));
+    } else if (t.url) {
+      const a = el('a', { text: 'source' });
+      a.addEventListener('click', () => call(keystone.openBrowser(t.url)));
+      parts.push(document.createTextNode(' ('), a, document.createTextNode(')'));
+    }
+    if (t.source === 'mine') parts.push(document.createTextNode(' (your tables folder)'));
+  });
+  p.replaceChildren(document.createTextNode('Tables: '), ...parts);
+}
+
+// ---------- value finder ----------
+const COMPARE_FIRST = [['exact', 'Exact value'], ['between', 'Value between']];
+const COMPARE_NEXT = [['exact', 'Exact value'], ['increased', 'Went up'], ['decreased', 'Went down'], ['increasedBy', 'Went up by'],
+  ['decreasedBy', 'Went down by'], ['changed', 'Changed'], ['unchanged', 'Didn’t change'], ['between', 'Value between']];
+const NEEDS_VALUE = new Set(['exact', 'between', 'increasedBy', 'decreasedBy']);
+
+function openFinder() {
+  state.finder.open = true;
+  renderModsPane(state.snapshot);
+  refreshFinder();
+  setTimeout(() => $('fVal').focus(), 0);
+}
+
+async function refreshFinder() {
+  const i = await call(keystone.finderInfo());
+  if (i) paintFinder(i);
+}
+
+function paintCompare() {
+  const c = $('fCompare').value;
+  $('fValWrap').hidden = !NEEDS_VALUE.has(c);
+  $('fVal2Wrap').hidden = c !== 'between';
+  $('fValLabel').textContent = c === 'between' ? 'From' : c === 'increasedBy' || c === 'decreasedBy' ? 'By how much' : 'Value';
+}
+
+function paintFinder(i) {
+  state.finder.info = i;
+  if (!state.finder.open || !i) return;
+  if (!i.available) {
+    $('fStatus').hidden = false;
+    $('fStatus').className = 'finder-status idle';
+    $('fStatusText').textContent = i.reason;
+    return;
+  }
+  const started = i.scans > 0;
+  const sel = $('fCompare');
+  const opts = started ? COMPARE_NEXT : COMPARE_FIRST;
+  const key = opts.map((o) => o[0]).join();
+  if (sel.dataset.key !== key) {
+    const prev = sel.value;
+    sel.replaceChildren(...opts.map(([v, t]) => el('option', { value: v, text: t })));
+    sel.dataset.key = key;
+    sel.value = opts.some((o) => o[0] === prev) ? prev : 'exact';
+  }
+  paintCompare();
+  if (started && i.type) $('fType').value = i.type;
+  $('fType').disabled = started || i.busy;
+  $('fFirst').hidden = started;
+  $('fNext').hidden = !started;
+  $('fUndo').hidden = !started;
+  $('fReset').hidden = !started;
+  for (const id of ['fFirst', 'fNext', 'fReset']) $(id).disabled = i.busy;
+  $('fUndo').disabled = i.busy || !i.canUndo;
+
+  const st = $('fStatus');
+  st.hidden = !i.busy && !started;
+  st.className = `finder-status${i.busy ? '' : ' idle'}`;
+  $('fCancel').hidden = !i.busy;
+  if (i.busy) {
+    const p = i.progress;
+    const pct = p && p.total ? Math.min(100, Math.round((p.done / p.total) * 100)) : 0;
+    $('fBar').style.width = `${pct}%`;
+    $('fStatusText').textContent = `Searching… ${pct}%`;
+  } else if (started) {
+    const n = i.count.toLocaleString();
+    $('fStatusText').textContent = i.count === 0 ? 'Nothing matched. Undo, or start a new scan.'
+      : i.count > i.listLimit ? `${n} found${i.truncated ? ' (stopped counting at 20 million)' : ''}. Change the value in the game and scan again to narrow it down.`
+        : i.count === 1 ? 'Found it. Add it as a mod below.' : `${n} found. Narrow it down, or try adding the likeliest one.`;
+  }
+  paintFinderResults(i);
+  paintMyMods(i.mods || []);
+}
+
+function paintFinderResults(i) {
+  const box = $('fResults');
+  const rows = i.results || [];
+  const key = rows.map((r) => r.address).join(',');
+  // Same hits as before: update the numbers only, so a name being typed
+  // into an Add box isn't wiped.
+  if (key && key === state.finder.rowsKey) {
+    for (const r of rows) {
+      const tr = box.querySelector(`tr[data-a="${r.address}"]`);
+      if (!tr) continue;
+      tr.querySelector('.now').textContent = fmt(r.value, i.type);
+      tr.classList.toggle('changed', r.value !== r.previous);
+    }
+    return;
+  }
+  state.finder.rowsKey = key;
+  state.finder.editing = null;
+  if (!rows.length) { box.replaceChildren(); return; }
+  const table = el('table', { class: 'finder-table' },
+    el('thead', {}, el('tr', {}, el('th', { text: 'Where' }), el('th', { text: 'Value now' }), el('th', { text: 'At last scan' }), el('th', { text: '' }))));
+  const body = el('tbody');
+  for (const r of rows) {
+    const act = el('td', { class: 'act' });
+    const add = el('button', { class: 'btn small', text: 'Add as mod' });
+    add.addEventListener('click', () => startAdd(act, r, i.type));
+    act.append(add);
+    const where = el('td', { class: 'mono where', text: r.where || r.address },
+      el('span', { class: `tag ${r.where ? 'keep' : 'temp'}`, text: r.where ? 'Saved' : 'Until the game closes', title: r.where ? 'In the game’s own memory: the same place every time it starts.' : 'This address changes every time the game starts.' }));
+    const tr = el('tr', { 'data-a': r.address, class: r.value !== r.previous ? 'changed' : '' },
+      where, el('td', { class: 'mono now', text: fmt(r.value, i.type) }), el('td', { class: 'mono', text: fmt(r.previous, i.type) }), act);
+    body.append(tr);
+  }
+  table.append(body);
+  box.replaceChildren(table);
+}
+
+function startAdd(cell, r, type) {
+  const input = el('input', { class: 'field', placeholder: 'Name it, like Caps', maxlength: '60' });
+  const save = el('button', { class: 'btn small primary', text: 'Save' });
+  const go = async () => {
+    const m = await call(keystone.finderAddMod({ address: r.address, type, name: input.value }));
+    if (!m) { input.focus(); return; }
+    toast(m.kept ? `Added “${m.name}” to My mods.` : `Added “${m.name}”. It works until the game closes.`);
+    cell.replaceChildren(el('span', { class: 'pop-note', text: 'Added' }));
+    refreshFinder();
+  };
+  save.addEventListener('click', go);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); if (e.key === 'Escape') state.finder.rowsKey = '', refreshFinder(); });
+  cell.replaceChildren(input, save);
+  input.focus();
+}
+
+function paintMyMods(mods) {
+  $('fMine').hidden = !mods.length;
+  $('fShare').disabled = !mods.some((m) => m.kept);
+  const box = $('fMineList');
+  if (box.contains(document.activeElement)) return; // mid-rename
+  const table = el('table', { class: 'finder-table' });
+  for (const m of mods) {
+    const act = el('td', { class: 'act' });
+    const rename = el('button', { class: 'btn small ghost', text: 'Rename' });
+    const del = el('button', { class: 'btn small ghost', text: 'Delete' });
+    rename.addEventListener('click', () => {
+      const input = el('input', { class: 'field', value: m.name, maxlength: '60' });
+      const save = el('button', { class: 'btn small primary', text: 'Save' });
+      const go = async () => { if (await call(keystone.finderRenameMod(m.id, input.value)) !== undefined) refreshFinder(); };
+      save.addEventListener('click', go);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+      act.replaceChildren(input, save);
+      input.select();
+    });
+    del.addEventListener('click', async () => {
+      if (!window.confirm(`Delete “${m.name}”?`)) return;
+      if (await call(keystone.finderRemoveMod(m.id)) !== undefined) refreshFinder();
+    });
+    act.append(rename, del);
+    table.append(el('tr', {},
+      el('td', { text: m.name }),
+      el('td', { class: 'mono where', text: m.address }, el('span', { class: `tag ${m.kept ? 'keep' : 'temp'}`, text: m.kept ? 'Saved' : 'Until the game closes' })),
+      act));
+  }
+  box.replaceChildren(table);
+}
+
+async function runScan(kind) {
+  const compare = $('fCompare').value;
+  const value = $('fVal').value.trim();
+  let type = $('fType').value;
+  // "72.5" can't be a whole number: search decimals instead of finding nothing.
+  if (kind === 'first' && /\.\d/.test(value) && !['float', 'double'].includes(type)) {
+    type = 'float';
+    $('fType').value = 'float';
+    toast('That number has decimals, so Keystone is searching decimal values.');
+  }
+  const opts = { compare, value, value2: $('fVal2').value.trim(), type };
+  const res = await call(kind === 'first' ? keystone.finderFirst(opts) : keystone.finderNext(opts));
+  if (res?.cancelled) toast('Scan cancelled.');
+  await refreshFinder();
+  if (NEEDS_VALUE.has(compare)) $('fVal').select();
+}
+
+function wireFinder() {
+  $('findBtn').addEventListener('click', openFinder);
+  $('emptyFindBtn').addEventListener('click', openFinder);
+  $('finderClose').addEventListener('click', () => { state.finder.open = false; renderModsPane(state.snapshot); });
+  $('fCompare').addEventListener('change', paintCompare);
+  $('fFirst').addEventListener('click', () => runScan('first'));
+  $('fNext').addEventListener('click', () => runScan('next'));
+  for (const id of ['fVal', 'fVal2']) {
+    $(id).addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || state.finder.info?.busy) return;
+      runScan(state.finder.info?.scans > 0 ? 'next' : 'first');
+    });
+  }
+  $('fUndo').addEventListener('click', async () => { await call(keystone.finderUndo()); refreshFinder(); });
+  $('fReset').addEventListener('click', async () => {
+    await call(keystone.finderReset());
+    state.finder.rowsKey = '';
+    $('fVal').value = '';
+    $('fVal2').value = '';
+    refreshFinder();
+    $('fVal').focus();
+  });
+  $('fCancel').addEventListener('click', () => call(keystone.finderCancel()));
+  $('fShare').addEventListener('click', async () => {
+    const r = await call(keystone.finderExport());
+    if (r) toast(`Saved ${r.count} mod${r.count === 1 ? '' : 's'} to ${r.file.split(/[\\/]/).pop()}.`);
+  });
+  keystone.onFinder(paintFinder);
+  // Live values for the listed hits while the finder is open.
+  setInterval(() => {
+    const i = state.finder.info;
+    if (!state.finder.open || !i?.available || i.busy || !i.count || i.count > i.listLimit) return;
+    if ($('finderPanel').hidden || document.hidden) return;
+    refreshFinder();
+  }, 1000);
 }
 
 // ---------- profiles ----------
@@ -488,7 +729,7 @@ function renderMods() {
     if (!list.length) $('modsList').replaceChildren(el('p', { class: 'pop-note', text: 'No mods match your search.' }));
   }
 
-  const usable = recs.filter((r) => r.kind === 'value').length;
+  const usable = recs.filter((r) => r.kind === 'value' || r.kind === 'script').length;
   const locked = recs.filter((r) => r.enabled).length;
   $('modsCount').textContent = `${usable} mods${locked ? `, ${locked} on` : ''}`;
 }
@@ -501,12 +742,14 @@ function renderMods() {
 //   default value box, Apply (write once) and Off/On (keep it there)
 function buildRow(r) {
   const nameEl = el('div', { class: 'mod-name' }, el('span', { class: 'label', text: modLabel(r), title: r.label ? r.name : '' }));
+  if (r.kind === 'script') return buildScriptRow(r, nameEl);
   if (r.kind !== 'value') {
     return el('div', { class: 'mod inert' }, svgIcon(BOLT, 'bolt'), nameEl,
       el('span', { class: 'reason', text: r.kind === 'script' ? 'Script: needs Cheat Engine' : (r.reason || 'Not supported') }));
   }
   const now = el('span', { class: 'now' });
   nameEl.append(now);
+  if (r.sessionOnly) nameEl.append(el('span', { class: 'temp-note', text: 'Until the game closes' }));
   const controls = el('div', { class: 'mod-controls' });
   const row = el('div', { class: 'mod' }, svgIcon(BOLT, 'bolt'), nameEl, controls);
   const ui = r.ui || {};
@@ -590,6 +833,37 @@ function buildRow(r) {
   key.addEventListener('click', () => captureHotkey(r));
   controls.prepend(pin, key);
 
+  rowEls.set(r.id, els);
+  patchRow(r);
+  return row;
+}
+
+// Cheat Engine scripts: On runs the script's [ENABLE] part, Off its
+// [DISABLE] part. No value to type, so just the switch.
+function buildScriptRow(r, nameEl) {
+  const now = el('span', { class: 'now' });
+  nameEl.append(now);
+  const controls = el('div', { class: 'mod-controls' });
+  const row = el('div', { class: 'mod script' }, svgIcon(BOLT, 'bolt'), nameEl, controls);
+  const els = { row, now, ui: {}, kind: 'script' };
+  const s = el('span', { class: 'seg', role: 'group', 'aria-label': `${modLabel(r)} on or off` },
+    el('button', { 'data-v': 'off', text: 'Off' }), el('button', { 'data-v': 'on', text: 'On' }));
+  s.addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const on = b.dataset.v === 'on';
+    if (on === Boolean(els.enabled)) return;
+    await call(keystone.setEnabled(r.id, on));
+  });
+  els.seg = s;
+  const pin = el('button', { class: `pin-btn${r.pinned ? ' on' : ''}`, title: r.pinned ? 'Unpin' : 'Pin: show it first and in the overlay', 'aria-label': `${r.pinned ? 'Unpin' : 'Pin'} ${modLabel(r)}`, 'aria-pressed': String(Boolean(r.pinned)) });
+  pin.append(svgIcon(PIN));
+  pin.addEventListener('click', () => call(keystone.setPinned(r.id, !r.pinned)));
+  const key = el('button', { class: `keycap${r.hotkey ? '' : ' unset'}`, title: r.hotkey ? `Hotkey: ${r.hotkey}. Click to change.` : 'Set a hotkey' });
+  if (r.hotkey) key.append(...keyParts(r.hotkey));
+  else key.textContent = '+ Key';
+  key.addEventListener('click', () => captureHotkey(r));
+  controls.append(pin, key, s);
   rowEls.set(r.id, els);
   patchRow(r);
   return row;
@@ -691,6 +965,14 @@ function patchValue(id, v) {
   const els = rowEls.get(id);
   if (!els) return;
   const rec = state.snapshot.records.find((r) => r.id === id);
+  if (rec?.kind === 'script') {
+    const failed = rec.status === 'error';
+    els.now.textContent = failed ? `Didn’t work: ${rec.error}` : rec.enabled ? 'Script on' : 'Script';
+    els.now.classList.toggle('waiting', !failed && !rec.enabled);
+    els.now.classList.toggle('failed', failed);
+    els.now.title = failed ? rec.error : '';
+    return;
+  }
   const waiting = v.status !== 'ok';
   els.now.textContent = waiting ? 'Waiting for the game' : `In game: ${fmt(v.current, rec?.valueType)}`;
   els.now.classList.toggle('waiting', waiting);
@@ -2198,6 +2480,11 @@ function wire() {
   };
   $('loadTableBtn').addEventListener('click', openTable);
   $('emptyLoadBtn').addEventListener('click', openTable);
+  wireFinder();
+  $('tablesFolderBtn').addEventListener('click', async () => {
+    const dir = await call(keystone.openTablesFolder());
+    if (dir) toast('Put .CT files here and they load every time this game starts.');
+  });
 
   keystone.onStructure((snap) => {
     const before = `${state.snapshot.game?.key}|${state.snapshot.game?.offline}`;

@@ -228,11 +228,25 @@ function renderList() {
       list.append(btn);
       continue;
     }
+    if (r.kind === 'script') {
+      // A Cheat Engine script: just on or off, the PC runs it.
+      const value = el('span', { class: 'row-value' });
+      const toggle = el('input', { type: 'checkbox', role: 'switch', 'aria-label': `${r.label || r.name} on or off` });
+      toggle.checked = r.enabled;
+      toggle.addEventListener('change', async () => {
+        try { await send({ type: 'toggle', id: r.id, enabled: toggle.checked }); } catch { toggle.checked = !toggle.checked; }
+      });
+      value.textContent = r.status === 'error' ? `Didn’t work: ${r.error}` : r.enabled ? 'On' : 'Script';
+      value.classList.toggle('waiting', !r.enabled && r.status !== 'error');
+      const main = el('div', { class: 'row-main' }, el('span', { class: 'row-name', text: r.label || r.name }), value);
+      list.append(el('div', { class: `row${r.enabled ? ' locked' : ''}` }, main, el('label', { class: 'switch' }, toggle, el('span', { class: 'track' }))));
+      continue;
+    }
     if (r.kind !== 'value') {
       list.append(el('div', { class: 'row inert' },
         el('div', { class: 'row-main' },
           el('span', { class: 'row-name', text: r.name }),
-          el('span', { class: 'row-value', text: r.kind === 'script' ? 'Script, runs only in Cheat Engine' : 'Not supported' }))));
+          el('span', { class: 'row-value', text: r.reason || 'Not supported' }))));
       continue;
     }
     const value = el('span', { class: 'row-value' });

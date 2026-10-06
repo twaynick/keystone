@@ -74,6 +74,20 @@ Mods are grouped like the cheat table's groups, with tabs to show one group at a
 
 Mods show **Waiting for the game** while their address can't be read, which is normal on loading screens and main menus. Locked mods stay locked and start writing again as soon as the game is back.
 
+**Tables that load by themselves.** Put a table in `tables/<game>/` in this repo and it ships in the installer and loads whenever that game starts, so mods work right after installing. `<game>` is the pack's folder name (like `fallout-4`). A `credits.json` next to it names who made each table, shown under the mods list (see `tables/README.md`). Tables for one PC only go in that game's **Tables folder** (button on the Mods tab, `%APPDATA%\Keystone\tables\<game>\`) and never end up in a build.
+
+**Making your own mods (Find a value).** No table for your game? Click **Find a value** on the Mods tab:
+
+1. Type a number the game shows (your caps, ammo, gold) and press **First scan**.
+2. Change it in the game, then search for the new number, or for **Went up** / **Went down** / **Went down by**, and press **Next scan**. Repeat until a few are left. **Undo** steps back one scan.
+3. Click **Add as mod** on the one that matches and name it. It joins the mods list under **My mods**, with the usual On/Off, value box, hotkeys and pins.
+
+Decimal values (health bars, stamina) are found with **Decimal** as the kind of number; a typed "72.3" matches whatever the game rounds to 72.3.
+
+Where the value lives decides how long the mod lasts. Values inside the game's own files show as **Saved** (like `Game.exe+1A2B3C`): they're kept, come back every time you open the game, and can be shared. Most values are on the heap instead and show **Until the game closes**: the address changes every launch, so the mod works for this session only. (A pointer finder that makes those last is next.)
+
+**Sharing:** **Share as table** saves your saved mods as a Cheat Engine table. A friend loads it with **Load table** (Keystone remembers it), and Cheat Engine opens it too. To ship mods with Keystone itself, put the file in the game's pack folder as `mods.ct`: a pack loads its `mods.ct` automatically.
+
 ### Library
 
 Each game's knowledge in one place. Open **Library** in the sidebar.
@@ -225,13 +239,16 @@ No game handy? Click **Try the demo game**. It's a fake game inside Keystone who
 | Address or pointer with type Byte, 2/4/8 Bytes, Float, Double | Supported: lock and set |
 | Group headers and nested entries | Supported |
 | Addresses like `game.exe+1234`, `"Game Assembly.dll"+10`, `[game.exe+20]+8` | Supported |
-| Auto Assembler scripts | Listed, not runnable (they need Cheat Engine's assembler) |
+| Auto Assembler scripts (Cheat Engine's templates: AOB injection, code caves, NOP patches, "get pointer" scripts) | Supported: On runs [ENABLE], Off runs [DISABLE] |
+| Addresses using symbols a script registers (e.g. `pPlayer`) | Supported once that script is on |
+| Scripts using Lua (`{$lua}`, `luacall`), `createthread`, `loadlibrary`, `include` | Listed with the reason, not runnable |
 | Strings, byte arrays, custom types | Listed, not supported yet |
-| Addresses using symbols a script defines (e.g. `pPlayer`) | Listed, not supported |
 
-Many popular tables are mostly scripts. Tables built from pointer scans (plain addresses with offsets) work best.
+**Scripts in detail.** Keystone runs `aobscanmodule`/`aobscan`/`aobscanregion`, `alloc`/`globalalloc` (placed near the game's code so a 5-byte jump reaches it), `dealloc`, `label`, `registersymbol`/`unregistersymbol`, `define`, `assert`, `fullaccess`, `db`/`dw`/`dd`/`dq`, `nop N`, `readmem` and `reassemble`, plus x86-64 instructions in Cheat Engine's syntax (numbers are hex unless `#decimal`; `(float)100` gives a float's bits). A script runs all-or-nothing: if any part fails, nothing it wrote stays and its memory is freed, and the error shows under the mod (for example "Couldn't find the code this script changes", usually meaning the game updated since the table was made). Scripts that are on are switched off when Keystone lets go of the game, so it's never left with a patch nobody manages.
 
-## Project layout
+Only use scripts in games where mods are allowed: they change the game's code, which anti-cheat looks for.
+
+## Project layout## Project layout
 
 ```
 src/main/            Electron main process
@@ -250,6 +267,8 @@ src/main/            Electron main process
   overlay-model.js   overlay data: position, map, waypoints, checklists, stats
   timers.js          countdown timers and their alerts
   identify.js        "what is it?" tools, like the Phasmophobia ghost identifier
+  finder.js          value finder and My mods (saved, session-only, shared as a table)
+  tables.js          tables that load by themselves (bundled and per-PC) and their credits
   pcstats.js         CPU and RAM for the overlay's PC panel
   overlay-window.js  the see-through overlay window and its hotkeys
   commands/
@@ -268,6 +287,9 @@ src/main/            Electron main process
     address.js       address expressions and pointer chains
     values.js        value types
     session.js       attached game: lock loop, live values
+    scanner.js       memory scans for the value finder (first/next scan, undo)
+    asm.js           x86-64 assembler for Cheat Engine syntax (encoding by iced-x86)
+    autoasm.js       runs Cheat Engine Auto Assembler scripts ([ENABLE]/[DISABLE])
     demo-game.js     fake game used by the demo and tests
 src/renderer/        desktop UI
 src/remote-web/      phone web app (served to the phone by remote/server.js)
@@ -275,11 +297,13 @@ src/overlay/         overlay page (minimap, stats, info)
 src/browser/         the browser window's toolbar page
 assets/              app icons
 src/shared/          shared styles, accent themes, Geist fonts (OFL), map math, crosshair drawing
+tables/             bundled cheat tables, loaded by game (see tables/README.md)
 packs/demo/          the demo game's pack: table, map, waypoints, info
 packs/ark-survival-ascended/  ASA pack: commands, creature and item IDs, guides
 packs/fallout-3/     Fallout 3 pack: console commands, 714 base-game items, bobblehead checklist, guides
 packs/far-cry-*/    Far Cry 3, 4, 5, 6, New Dawn, Primal: weapons, vehicles and animals with pictures; mods flagged offline-only
 packs/forza-*/      Forza Horizon 4, 5, 6 (mods offline-only) and Forza Motorsport (online-only, no mods): every car with pictures
+packs/fallout-shelter/  Fallout Shelter: dwellers, weapons, outfits, pets and rooms with pictures; legendary dweller checklist
 packs/lego-*/       LEGO packs (Star Wars: The Skywalker Saga, Star Wars: The Complete Saga, Batman 2): cross-checked codes
 packs/phasmophobia/  Phasmophobia pack: ghost identifier data, ghosts, equipment, cursed possessions, maps, incense timers, guides
 packs/fallout-new-vegas/  New Vegas pack: console commands, 1,100+ base-game items, snow globe checklist, guides
@@ -288,6 +312,7 @@ scripts/build-gamebryo-catalog.js  rebuilds the Fallout 3 / New Vegas item lists
 scripts/add-wiki-pictures.js       fills in each catalog entry's picture file from its wiki infobox
 scripts/build-category-catalog.js  builds a Library list from wiki categories (used for Far Cry)
 scripts/build-forza-cars.js  builds a Forza car list from the Forza Wiki's car tables
+scripts/build-fallout-shelter.js  builds the Fallout Shelter lists from Nukapedia's overview tables
 scripts/build-phasmophobia.js      rebuilds the Phasmophobia ghost, equipment and map lists from the wiki
 test/                node:test suite
 scripts/capture.js   dev helper: launch, run a snippet, save a screenshot
@@ -295,6 +320,27 @@ scripts/capture.js   dev helper: launch, run a snippet, save a screenshot
 ```
 
 ## Changelog
+
+### 0.28.0
+- **Cheat Engine scripts work.** Auto Assembler scripts in tables now switch on and off like any mod (and take hotkeys, pins and the phone switch): code injections and caves, NOP patches, AOB scans, symbols and the rest of Cheat Engine's templates. Values that read through a symbol a script registers (`[pPlayer]+10`) work once that script is on. Scripts that need Lua say so instead of half-running.
+- Scripts run all-or-nothing and undo themselves if anything fails; the reason shows under the mod. Scripts that are on are turned off when Keystone lets go of the game.
+- The demo table has two real scripts, **God mode** (a NOP patch) and **Infinite ammo** (Cheat Engine's code-cave template), and the demo game honours them.
+- Saved mods (profiles) include scripts and turn them on before the values that depend on them.
+
+### 0.27.0
+- **Bundled tables**: tables in the repo's `tables/<game>/` folder ship in the installer and load by themselves when the game starts, with credit to their makers from `credits.json` shown under the mods list.
+- **Tables folder**: a per-game folder on each PC (button on the Mods tab) for tables that load by themselves on that PC only.
+
+### 0.26.0
+- **Find a value**: make your own mods without Cheat Engine. Search the game's memory for a number it shows, change it in game, scan again (exact value, went up/down, went up/down by, changed, unchanged, between), and add the match as a mod. Scans run in the background with progress and Cancel, and Undo steps back a scan.
+- **My mods**: mods you make join the mods list with all the usual controls. Ones in the game's static memory are saved and come back every launch; ones on the heap last until the game closes, and are marked that way.
+- **Share as table** saves your mods as a Cheat Engine table a friend can load, and a pack ships mods by having a `mods.ct` in its folder.
+- The demo game has a day counter in static memory, so you can try a saved mod there.
+
+### 0.25.0
+- Fallout Shelter pack: the Library has all 100 rare and legendary dwellers (legendaries with their SPECIAL, weapon, outfit and home game), 249 weapons, 179 outfits, 62 pets and 28 rooms, with pictures. The pack also has a guide, a Legendary dwellers checklist (all 53) and Steam art. Mods work from a Cheat Engine table as usual; it's single-player, so there's no offline-only flag, but the guide says to back up your vault saves first.
+
+Fallout Shelter data and pictures come from [Nukapedia](https://fallout.fandom.com) on Fandom; the executable name from Steam's launch configuration.
 
 ### 0.24.1
 - Code signing, ready to switch on: the release workflow signs the installer with Azure Artifact Signing when the repo has the signing secrets and variables, checks the signature before publishing, and builds unsigned (as before) when it doesn't. A half-finished setup stops the build with a message saying what's missing, rather than quietly shipping unsigned. Setup steps are in `docs/SIGNING.md`.

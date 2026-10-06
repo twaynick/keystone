@@ -40,11 +40,58 @@
         </CheatEntry>
         <CheatEntry>
           <ID>6</ID>
-          <Description>"One-hit kills"</Description>
+          <Description>"God mode"</Description>
           <VariableType>Auto Assembler Script</VariableType>
-          <AssemblerScript>[ENABLE]
-// Example of an entry Keystone lists but can't run yet.
+          <AssemblerScript>{ A patch script: finds the code that takes damage by its bytes and
+  replaces it with NOPs (do nothing). [DISABLE] puts the original bytes back. }
+[ENABLE]
+aobscanmodule(HURT,demo.exe,F3 0F 5C C1 F3 0F 11 47 10) // subss xmm0,xmm1 / movss [rdi+10],xmm0
+registersymbol(HURT)
+
+HURT:
+  nop 9
+
 [DISABLE]
+HURT:
+  db F3 0F 5C C1 F3 0F 11 47 10
+
+unregistersymbol(HURT)
+</AssemblerScript>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>7</ID>
+          <Description>"Infinite ammo"</Description>
+          <VariableType>Auto Assembler Script</VariableType>
+          <AssemblerScript>{ Cheat Engine's "AOB injection" template: the game's code jumps to a
+  code cave (newmem) that runs everything except the line using a bullet,
+  then jumps back. }
+[ENABLE]
+aobscanmodule(AMMO,demo.exe,FF 4F 18 48 8B 4B 08) // should be unique
+alloc(newmem,$1000,AMMO)
+
+label(code)
+label(return)
+
+newmem:
+  // the bullet isn't taken
+code:
+  mov rcx,[rbx+08]
+  jmp return
+
+AMMO:
+  jmp newmem
+  nop 2
+return:
+registersymbol(AMMO)
+
+[DISABLE]
+AMMO:
+  db FF 4F 18 48 8B 4B 08
+  // dec dword ptr [rdi+18]
+  // mov rcx,[rbx+08]
+
+unregistersymbol(AMMO)
+dealloc(newmem)
 </AssemblerScript>
         </CheatEntry>
       </CheatEntries>

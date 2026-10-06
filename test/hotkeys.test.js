@@ -60,8 +60,11 @@ test('setting hotkeys: saved per game, unique within the game, shown on records'
   assert.equal(c.snapshot().records.find((r) => r.name === 'Health').hotkey, 'F5');
   c.setHotkey(id('Health'), null);
   assert.deepEqual(c.activeHotkeys(), {});
+  // Scripts switch on and off, so they can have hotkeys; group headers can't.
   const script = c.session.records.find((r) => r.kind === 'script').id;
-  assert.throws(() => c.setHotkey(script, 'F2'), /Only mods with a value/);
+  assert.equal(c.setHotkey(script, 'F2'), 'F2');
+  const group = c.session.records.find((r) => r.kind === 'group').id;
+  assert.throws(() => c.setHotkey(group, 'F3'), /Only mods that can be switched/);
 });
 
 test('hotkeys are only active while mods are connected', () => {

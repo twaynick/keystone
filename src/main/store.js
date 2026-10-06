@@ -16,6 +16,7 @@ const DEFAULTS = () => ({
   library: { notes: {} },  // "catalog:id" -> your note
   hotkeys: {},         // record id -> accelerator ("Ctrl+num1")
   pinned: [],          // record ids shown first and in the overlay's Mods panel
+  myMods: [],          // mods made with the value finder: [{ id, name, type, address, offsets }]
 });
 
 // null means "use the game pack's value" until the user changes it.

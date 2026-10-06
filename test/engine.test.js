@@ -21,6 +21,11 @@ test('Win32 struct layouts match the Windows SDK (x64)', () => {
   assert.equal(koffi.sizeof(win32.MODULEENTRY32W), 1080);
   assert.equal(koffi.offsetof(win32.MODULEENTRY32W, 'modBaseAddr'), 24);
   assert.equal(koffi.offsetof(win32.PROCESSENTRY32W, 'szExeFile'), 44);
+  // VirtualQueryEx (the value finder's memory map) checks the size it's given.
+  assert.equal(koffi.sizeof(win32.MEMORY_BASIC_INFORMATION), 48);
+  assert.equal(koffi.offsetof(win32.MEMORY_BASIC_INFORMATION, 'RegionSize'), 24);
+  assert.equal(koffi.offsetof(win32.MEMORY_BASIC_INFORMATION, 'State'), 32);
+  assert.equal(koffi.offsetof(win32.MEMORY_BASIC_INFORMATION, 'Type'), 40);
 });
 
 test('values encode/decode round-trip and reject junk', () => {
@@ -43,11 +48,12 @@ test('CT parser: groups, types, reversed offsets, scripts', () => {
   assert.equal(byName['Ammo in clip'].valueType, 'int32');
   // Stored as 8, 40 on disk; applied as 40 then 8.
   assert.deepEqual(byName.Wood.offsets, [0x40n, 0x8n]);
-  assert.equal(byName['One-hit kills'].kind, 'script');
+  assert.equal(byName['God mode'].kind, 'script');
+  assert.equal(byName['Infinite ammo'].kind, 'script');
   assert.equal(byName.Health.id, 'ct:demo:2');
 });
 
-test('CT parser keeps hex offsets hex and flags script symbols', () => {
+test('CT parser keeps hex offsets hex; script symbols resolve once registered', () => {
   const xml = `<CheatTable><CheatEntries>
     <CheatEntry><ID>1</ID><Description>"A"</Description><VariableType>4 Bytes</VariableType>
       <Address>game.exe+10</Address><Offsets><Offset>10</Offset><Offset>20</Offset></Offsets></CheatEntry>
@@ -56,8 +62,10 @@ test('CT parser keeps hex offsets hex and flags script symbols', () => {
   </CheatEntries></CheatTable>`;
   const [a, b, c] = parseCheatTable(xml);
   assert.deepEqual(a.offsets, [0x20n, 0x10n]);
-  assert.equal(b.kind, 'unsupported');
-  assert.match(b.reason, /pPlayer/);
+  // A script-registered symbol: a value that reads once its script is on.
+  assert.equal(b.kind, 'value');
+  assert.throws(() => address.evaluate(address.parse(b.address), new DemoGame({ tickMs: 0 })), /Turn on the script that sets up "pPlayer"/);
+  assert.equal(address.evaluate(address.parse(b.address), new DemoGame({ tickMs: 0 }), new Map([['pplayer', 0x1234n]])), 0x1234n);
   assert.equal(c.kind, 'unsupported');
   assert.throws(() => parseCheatTable('<nope/>'), /Cheat Engine/);
 });

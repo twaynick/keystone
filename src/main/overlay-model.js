@@ -739,8 +739,8 @@ class OverlayModel {
   _pinnedMods() {
     if (!this.session) return [];
     const snap = this.c.snapshot();
-    return snap.records.filter((r) => r.pinned && r.kind === 'value')
-      .map((r) => ({ id: r.id, label: r.label || r.name, hotkey: r.hotkey || null, control: r.ui?.control || 'default' }));
+    return snap.records.filter((r) => r.pinned && (r.kind === 'value' || r.kind === 'script'))
+      .map((r) => ({ id: r.id, label: r.label || r.name, hotkey: r.hotkey || null, control: r.kind === 'script' ? 'toggle' : (r.ui?.control || 'default') }));
   }
 
   values() {

@@ -105,8 +105,11 @@
 
             <section class="empty" id="emptyNoTable" hidden>
               <h2>No mods loaded for this game yet</h2>
-              <p>Load a Cheat Engine table (.CT) made for this game and its values show up here as mods.</p>
-              <button class="btn primary" id="emptyLoadBtn">Load cheat table</button>
+              <p>Find a value yourself, like your caps or ammo, and turn it into a mod. Or load a Cheat Engine table (.CT) made for this game.</p>
+              <div class="empty-actions">
+                <button class="btn primary" id="emptyFindBtn">Find a value</button>
+                <button class="btn" id="emptyLoadBtn">Load cheat table</button>
+              </div>
             </section>
 
             <section class="empty" id="emptyNoMods" hidden>
@@ -117,12 +120,59 @@
               </div>
             </section>
 
+            <section class="block finder" id="finderPanel" hidden>
+              <div class="block-head">
+                <h2>Find a value</h2>
+                <button class="btn small ghost" id="finderClose">Close</button>
+              </div>
+              <ol class="finder-how">
+                <li>Type a number the game shows, like your caps, and press <strong>First scan</strong>.</li>
+                <li>Change it in the game (spend some, pick some up), type the new number and press <strong>Next scan</strong>.</li>
+                <li>Repeat until a few are left, then <strong>Add</strong> the one that matches as a mod.</li>
+              </ol>
+              <div class="finder-form">
+                <label class="finder-field"><span>Search for</span><select class="field" id="fCompare"></select></label>
+                <label class="finder-field" id="fValWrap"><span id="fValLabel">Value</span><input class="field" id="fVal" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+                <label class="finder-field" id="fVal2Wrap" hidden><span>and</span><input class="field" id="fVal2" inputmode="decimal" autocomplete="off" spellcheck="false"></label>
+                <label class="finder-field"><span>Kind of number</span><select class="field" id="fType">
+                  <option value="int32">Whole number (most values)</option>
+                  <option value="float">Decimal (health, stamina, positions)</option>
+                  <option value="double">Decimal, double size</option>
+                  <option value="int16">Small whole number (2 bytes)</option>
+                  <option value="int64">Big whole number (8 bytes)</option>
+                  <option value="byte">Tiny number (1 byte, 0 to 255)</option>
+                </select></label>
+                <div class="finder-buttons">
+                  <button class="btn primary" id="fFirst">First scan</button>
+                  <button class="btn primary" id="fNext" hidden>Next scan</button>
+                  <button class="btn ghost" id="fUndo" hidden>Undo</button>
+                  <button class="btn ghost" id="fReset" hidden>New scan</button>
+                </div>
+              </div>
+              <div class="finder-status" id="fStatus" hidden>
+                <div class="finder-bar"><span id="fBar"></span></div>
+                <span id="fStatusText"></span>
+                <button class="btn small ghost" id="fCancel" hidden>Cancel</button>
+              </div>
+              <div class="finder-results" id="fResults"></div>
+              <div class="finder-mine" id="fMine" hidden>
+                <div class="block-head">
+                  <h3>My mods</h3>
+                  <button class="btn small" id="fShare">Share as table</button>
+                </div>
+                <p class="block-note">Saved mods come back every time you open the game, and <strong>Share as table</strong> saves them as a file a friend can load. To ship them with Keystone, put the file in the game's pack folder as <code>mods.ct</code>. Mods marked <em>until the game closes</em> are on values whose address changes every time the game starts.</p>
+                <div id="fMineList"></div>
+              </div>
+            </section>
+
             <section class="mods" id="modsView" hidden>
               <div class="mods-toolbar">
                 <nav class="cat-tabs" id="modCats" aria-label="Mod categories"></nav>
                 <div class="mods-tools">
                   <input class="field search" id="modSearch" type="search" placeholder="Search mods" autocomplete="off">
+                  <button class="btn small" id="findBtn">Find a value</button>
                   <button class="btn small" id="loadTableBtn">Load table</button>
+                  <button class="btn small ghost" id="tablesFolderBtn" title="Tables you put here load by themselves for this game">Tables folder</button>
                 </div>
               </div>
               <div class="profiles" id="profiles">
@@ -142,6 +192,7 @@
                 <span class="mods-count" id="modsCount"></span>
               </div>
               <div class="mods-list" id="modsList"></div>
+              <p class="table-credits" id="tableCredits" hidden></p>
             </section>
           </section>
 
