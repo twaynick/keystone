@@ -127,6 +127,11 @@ test('ARK Library: sections and entries say what pictures they have; files come 
   assert.match(wiki.calls[0].url, /^https:\/\/ark\.wiki\.gg\/wiki\/Special:FilePath\/Dossier_Rex\.png/);
   await assert.rejects(c.library.pictureFile('hero', 'creatures', '../../etc/passwd'), /isn.t in the list/);
   assert.equal(await c.library.pictureFile('evil', 'creatures', rex.id), null);
+  // The Library grid's card sizes: dossiers for creatures, nothing to switch for items.
+  assert.equal(sec.pictures.altStyle, 'Dossiers');
+  assert.equal(c.library.info().sections.find((s) => s.catalog === 'items').pictures.altStyle, null);
+  assert.ok(await c.library.pictureFile('carddossier', 'creatures', rex.id));
+  assert.ok(wiki.calls.some((x) => /Dossier_Rex\.png\?width=240/.test(x.url)), 'card pictures come at card size');
   assert.equal(c.commands.info().thumbs.includes('creatures'), true);
   c.shutdown();
 });

@@ -45,7 +45,12 @@ function el(tag, attrs = {}, ...children) {
     if (k === 'class') node.className = v;
     else if (k === 'text') node.textContent = v;
     // CSSOM assignment, not a style attribute: the CSP blocks inline style attributes.
-    else if (k === 'style') Object.assign(node.style, v);
+    else if (k === 'style') {
+      // Custom properties (--group) only take through setProperty.
+      for (const [p, val] of Object.entries(v)) {
+        if (p.startsWith('--')) node.style.setProperty(p, val); else node.style[p] = val;
+      }
+    }
     else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
     else if (v === true) node.setAttribute(k, '');
     else if (v !== false && v !== null && v !== undefined) node.setAttribute(k, v);
@@ -2228,6 +2233,42 @@ function renderLibGuides(main, info) {
   );
 }
 
+// Many wiki "renders" are black line-art icons on a transparent background
+// (ARK's creature icons), which vanish on a dark card. Dark, colorless
+// pictures get shown inverted (white lines); colored ones are left alone.
+function isInkArt(img) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = 24; c.height = 24;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, 24, 24);
+    const d = ctx.getImageData(0, 0, 24, 24).data;
+    let n = 0; let lum = 0; let sat = 0; let clear = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 40) { clear++; continue; }
+      const r = d[i]; const g = d[i + 1]; const b = d[i + 2];
+      const max = Math.max(r, g, b); const min = Math.min(r, g, b);
+      lum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      sat += max ? (max - min) / max : 0;
+      n++;
+    }
+    // Needs a see-through background too: a dark photo isn't line art.
+    return n > 0 && clear > 24 * 24 * 0.25 && lum / n < 70 && sat / n < 0.25;
+  } catch {
+    return false;
+  }
+}
+
+// Group colors for a section's categories, in a fixed order so a category
+// keeps its color between visits.
+const GROUP_COLORS = ['#3ddc84', '#ff6b6b', '#e879f9', '#ffb547', '#38bdf8', '#a78bfa', '#f472b6', '#a3e635', '#facc15', '#2dd4bf', '#fb923c', '#60a5fa'];
+const PAGE_STEP = 240;
+const plural = (label) => label.toLowerCase();
+const singular = (label) => label.toLowerCase().replace(/ies$/, 'y').replace(/s$/, '');
+
+// A section of the Library (creatures, items, cars...) as a database page:
+// search, category chips, and the entries grouped by category in a grid of
+// picture cards.
 async function renderLibSection(main, page) {
   let list = state.lib.entries[page.catalog];
   if (!list) {
@@ -2239,34 +2280,133 @@ async function renderLibSection(main, page) {
     renderLibrary();
     return;
   }
-  const f = state.lib.filters[page.catalog] || (state.lib.filters[page.catalog] = { q: '', category: '', map: '' });
-  const cats = [...new Set(list.map((x) => x.category).filter(Boolean))].sort();
-  const maps = [...new Set(list.map((x) => x.map).filter(Boolean))];
-  const search = el('input', { class: 'field', type: 'search', placeholder: `Filter ${page.label.toLowerCase()}`, value: f.q, autocomplete: 'off' });
-  const catSel = el('select', { class: 'field' }, el('option', { value: '', text: 'All categories' }), ...cats.map((c) => el('option', { value: c, text: c })));
-  catSel.value = f.category;
-  const mapSel = el('select', { class: 'field' }, el('option', { value: '', text: 'All maps' }), ...maps.map((m) => el('option', { value: m, text: m })));
-  mapSel.value = f.map;
-  mapSel.hidden = !maps.length;
   const sectionInfo = state.lib.info.sections.find((x) => x.catalog === page.catalog);
-  const grid = el('div', { class: 'catalog-grid' });
-  const more = el('p', { class: 'catalog-more' });
+  const pics = sectionInfo?.pictures;
+  const showCode = sectionInfo?.idLabel === 'Code';
+  const f = state.lib.filters[page.catalog] || (state.lib.filters[page.catalog] = { q: '', cats: [], map: '', limit: PAGE_STEP, pic: 'card' });
+  f.cats = f.cats || [];
+  f.limit = f.limit || PAGE_STEP;
+  f.pic = f.pic || 'card';
+
+  const counts = new Map();
+  for (const x of list) counts.set(x.category || 'Other', (counts.get(x.category || 'Other') || 0) + 1);
+  const groups = [...counts.keys()].sort((a, b) => a.localeCompare(b));
+  const color = new Map(groups.map((g, i) => [g, GROUP_COLORS[i % GROUP_COLORS.length]]));
+  const maps = [...new Set(list.map((x) => x.map).filter(Boolean))];
+  const label = page.label || sectionInfo?.label || 'Entries';
+
+  // ---- header ----
+  const search = el('input', { class: 'field db-search', type: 'search', placeholder: `Search ${plural(label)}…`, value: f.q, autocomplete: 'off' });
+  const mapSel = el('select', { class: 'field db-map' }, el('option', { value: '', text: 'All maps' }), ...maps.map((m) => el('option', { value: m, text: m })));
+  mapSel.value = f.map;
+  // Renders or dossiers, where the wiki has both (ARK's creatures).
+  let picToggle = null;
+  if (!pics?.altStyle && f.pic !== 'card') f.pic = 'card';
+  if (pics?.thumb && pics?.altStyle) {
+    picToggle = el('div', { class: 'seg db-pics', role: 'group', 'aria-label': 'Pictures' },
+      el('button', { 'data-v': 'card', text: 'Renders' }), el('button', { 'data-v': 'carddossier', text: pics.altStyle }));
+    const sync = () => { for (const b of picToggle.children) b.setAttribute('aria-pressed', String(b.dataset.v === f.pic)); };
+    sync();
+    picToggle.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b || b.dataset.v === f.pic) return;
+      f.pic = b.dataset.v;
+      sync();
+      paint();
+    });
+  }
+  const chips = el('div', { class: 'db-chips', role: 'group', 'aria-label': 'Categories' });
+  const groupsBox = el('div', { class: 'db-groups' });
+  const more = el('div', { class: 'db-more' });
+
+  const chip = (name, n, all) => {
+    const on = all ? !f.cats.length : f.cats.includes(name);
+    const b = el('button', { class: `db-chip${all ? ' all' : ''}`, 'aria-pressed': String(on) },
+      el('span', { class: 'db-check', 'aria-hidden': 'true' }),
+      all ? null : el('span', { class: 'db-dot', style: { background: color.get(name) } }),
+      el('span', { text: all ? `All ${plural(label)}` : name }),
+      el('span', { class: 'db-n', text: String(n) }));
+    b.addEventListener('click', () => {
+      if (all) f.cats = [];
+      else f.cats = on ? f.cats.filter((c) => c !== name) : [...f.cats, name];
+      f.limit = PAGE_STEP;
+      paintChips();
+      paint();
+    });
+    return b;
+  };
+  const paintChips = () => chips.replaceChildren(chip(null, list.length, true), ...groups.map((g) => chip(g, counts.get(g), false)));
+
+  const card = (x) => {
+    const g = x.category || 'Other';
+    const tags = [];
+    if (showCode) tags.push(el('code', { class: 'db-tag code', text: x.id }));
+    if (x.map) tags.push(el('span', { class: 'db-tag', text: x.map }));
+    for (const t of Array.isArray(x.tags) ? x.tags.slice(0, 2) : []) tags.push(el('span', { class: 'db-tag alt', text: String(t) }));
+    let pic = null;
+    if (pics?.thumb) {
+      const img = el('img', { alt: '', loading: 'lazy', decoding: 'async', crossorigin: 'anonymous', src: `kslib://${f.pic}/${encodeURIComponent(page.catalog)}/${encodeURIComponent(x.id)}` });
+      if (f.pic === 'card') img.addEventListener('load', () => { if (isInkArt(img)) img.classList.add('ink'); });
+      const initials = el('span', { class: 'db-initials', text: x.name.replace(/[^A-Za-z0-9 ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() });
+      initials.hidden = true;
+      img.addEventListener('error', () => { img.remove(); initials.hidden = false; });
+      pic = el('span', { class: `db-pic${f.pic === 'carddossier' ? ' dossier' : ''}` }, img, initials);
+    }
+    const c = el('button', { class: `db-card${pic ? '' : ' no-pic'}`, title: x.name, style: { '--group': color.get(g) } },
+      pic, el('span', { class: 'db-name', text: x.name }), tags.length ? el('span', { class: 'db-tags' }, ...tags) : null);
+    c.addEventListener('click', () => libGo({ kind: 'entry', catalog: page.catalog, id: x.id, back: page }));
+    return c;
+  };
+
   const paint = () => {
     const q = f.q.trim().toLowerCase();
-    const m = list.filter((x) => (!f.category || x.category === f.category) && (!f.map || x.map === f.map) && (!q || x.name.toLowerCase().includes(q)));
+    const want = new Set(f.cats);
+    let m = list.filter((x) => (!want.size || want.has(x.category || 'Other')) && (!f.map || x.map === f.map)
+      && (!q || x.name.toLowerCase().includes(q) || (showCode && String(x.id).toLowerCase().includes(q))));
     if (q) m.sort((a, b) => rank(a.name, q) - rank(b.name, q) || a.name.localeCompare(b.name));
-    const LIMIT = 300;
-    grid.replaceChildren(...m.slice(0, LIMIT).map((x) => {
-      const card = catCard(page.catalog, x, Boolean(sectionInfo?.pictures?.thumb), {}, sectionInfo?.idLabel === 'Code');
-      card.addEventListener('click', () => libGo({ kind: 'entry', catalog: page.catalog, id: x.id, back: page }));
-      return card;
+    const total = m.length;
+    m = m.slice(0, f.limit);
+    // Grouped by category; a search shows best matches first inside each.
+    const byGroup = new Map();
+    for (const x of m) {
+      const g = x.category || 'Other';
+      if (!byGroup.has(g)) byGroup.set(g, []);
+      byGroup.get(g).push(x);
+    }
+    const order = [...byGroup.keys()].sort((a, b) => a.localeCompare(b));
+    groupsBox.replaceChildren(...order.map((g) => {
+      const items = byGroup.get(g);
+      if (!q) items.sort((a, b) => a.name.localeCompare(b.name));
+      // One category: its heading would just repeat the page title.
+      return el('section', { class: 'db-group', style: { '--group': color.get(g) } },
+        groups.length < 2 ? null : el('header', { class: 'db-group-head' },
+          el('span', { class: 'db-group-dot', 'aria-hidden': 'true' }),
+          el('h2', { text: g }),
+          el('span', { class: 'db-count', text: String(counts.get(g)) })),
+        el('div', { class: `db-grid${pics?.thumb ? '' : ' compact'}` }, ...items.map(card)));
     }));
-    more.textContent = !m.length ? 'Nothing matches.' : m.length > LIMIT ? `Showing ${LIMIT} of ${m.length}. Filter to narrow it down.` : `${m.length} shown.`;
+    if (!total) groupsBox.replaceChildren(el('p', { class: 'lib-sub', text: q ? `No ${plural(label)} match "${f.q}".` : 'Nothing matches those filters.' }));
+    if (total > f.limit) {
+      const b = el('button', { class: 'btn', text: `Show more (${(total - f.limit).toLocaleString()} left)` });
+      b.addEventListener('click', () => { f.limit += PAGE_STEP; paint(); });
+      more.replaceChildren(el('span', { text: `Showing ${f.limit.toLocaleString()} of ${total.toLocaleString()}.` }), b);
+    } else {
+      more.replaceChildren();
+    }
   };
-  search.addEventListener('input', () => { f.q = search.value; paint(); });
-  catSel.addEventListener('change', () => { f.category = catSel.value; paint(); });
-  mapSel.addEventListener('change', () => { f.map = mapSel.value; paint(); });
-  main.replaceChildren(el('h1', { text: page.label }), el('div', { class: 'catalog-filters' }, search, catSel, mapSel), grid, more);
+
+  search.addEventListener('input', () => { f.q = search.value; f.limit = PAGE_STEP; paint(); });
+  mapSel.addEventListener('change', () => { f.map = mapSel.value; f.limit = PAGE_STEP; paint(); });
+  paintChips();
+
+  main.replaceChildren(el('div', { class: 'db' },
+    el('p', { class: 'db-eyebrow', text: state.lib.info.game }),
+    el('h1', { class: 'db-title', text: label }),
+    el('p', { class: 'db-sub', text: `${list.length.toLocaleString()} ${list.length === 1 ? singular(label) : plural(label)} · ${groups.length} ${groups.length === 1 ? 'category' : 'categories'}` }),
+    el('div', { class: 'db-tools' }, search, maps.length ? mapSel : null, picToggle),
+    groups.length > 1 ? chips : null,
+    groupsBox,
+    more));
   paint();
 }
 

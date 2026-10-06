@@ -67,6 +67,10 @@ class LibraryModel {
     return {
       thumb: Array.isArray(c.thumb) && c.thumb.length > 0,
       hero: Array.isArray(c.hero) && c.hero.length > 0,
+      // A second picture style worth switching the grid to: ARK's dossier
+      // drawings. Where the big picture is the same file as the small one,
+      // there's nothing to switch.
+      altStyle: Array.isArray(c.hero) && /dossier/i.test(String(c.hero[0] || '')) ? 'Dossiers' : null,
       spawnMaps: c.spawnMaps ? (s.spawnMaps || []).map((m, index) => ({ index, name: String(m.name) })) : [],
       credit: s.credit ? String(s.credit) : null,
       creditUrl: /^https:\/\//.test(s.creditUrl || '') ? s.creditUrl : null,
@@ -83,11 +87,15 @@ class LibraryModel {
     return this._entry(catalog, id).name;
   }
 
-  // Local file for kslib:// requests, or null.
+  // Local file for kslib:// requests, or null. 'card' and 'carddossier'
+  // are the thumb and hero pictures at the Library grid's card size: the
+  // list's 96 px thumbs look soft that big, and full heroes are wasteful.
   async pictureFile(kind, catalog, id) {
     const s = this._imgSpec();
-    if (!s || !['thumb', 'hero'].includes(kind) || !this.c.game) return null;
-    return this.images.first(s, candidates(s, catalog, kind, this._entry(catalog, id)), SIZES[kind]);
+    const KIND = { thumb: ['thumb', SIZES.thumb], hero: ['hero', SIZES.hero], card: ['thumb', SIZES.card], carddossier: ['hero', SIZES.card] };
+    if (!s || !KIND[kind] || !this.c.game) return null;
+    const [templates, size] = KIND[kind];
+    return this.images.first(s, candidates(s, catalog, templates, this._entry(catalog, id)), size);
   }
 
   async spawnFile(part, index, catalog, id) {

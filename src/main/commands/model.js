@@ -65,8 +65,13 @@ class CommandsModel {
     // Some consoles (Fallout's) have no paste, so paste mode is only offered
     // where the pack says it works.
     const pasteSupported = spec.console?.paste !== false;
+    // A Tab saved before v0.35.1 was usually just the old default, which
+    // was wrong for ARK: Survival Ascended (Tab recalls the last command
+    // there; the tilde key opens the console). Only a key picked by hand
+    // since then overrides the pack's.
+    const saved = d.consoleKey && (d.consoleKeyChosen || d.consoleKey !== 'Tab') ? d.consoleKey : null;
     return {
-      consoleKey: d.consoleKey || spec.console?.key || 'Tab',
+      consoleKey: saved || spec.console?.key || 'Tab',
       prefix: d.prefix ?? prefixes[0],
       prefixes,
       mode: pasteSupported ? (d.mode || 'type') : 'type',
@@ -88,6 +93,7 @@ class CommandsModel {
       if (patch.consoleKey !== undefined) {
         if (!['Tab', 'Backquote', 'Insert'].includes(patch.consoleKey)) throw new Error('Pick Tab, backquote or Insert for the console key.');
         d.consoleKey = patch.consoleKey;
+        d.consoleKeyChosen = true;
       }
       if (patch.prefix !== undefined) {
         if (!(spec.console?.prefixes || ['']).includes(patch.prefix)) throw new Error('Unknown command prefix.');

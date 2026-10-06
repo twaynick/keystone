@@ -35,7 +35,7 @@ const crypto = require('crypto');
 // The renderer only ever names an entry, never a URL or a file name, so a
 // compromised page can't make Keystone fetch anything the pack didn't list.
 
-const SIZES = { thumb: 96, hero: 720, map: 640 };
+const SIZES = { thumb: 96, card: 240, hero: 720, map: 640 };
 const MAX_BYTES = 6 * 1024 * 1024;
 // A picture the wiki doesn't have is asked for again after this long, in
 // case someone uploads it.

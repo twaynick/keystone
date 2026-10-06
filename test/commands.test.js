@@ -287,3 +287,18 @@ test('Fallout 4 pack: item commands, quick commands with choices, no paste', asy
   await c.commands.run('quick', 'tgm');
   assert.deepEqual(calls[0], { pid: 777, lines: ['tgm'], opts: { consoleKey: 'Backquote', mode: 'type', keepsOpen: true } });
 });
+
+test('ARK: Survival Ascended opens its console with the tilde key; an old saved Tab gives way', () => {
+  const { Controller } = require('../src/main/controller');
+  const c = new Controller({ packsDir: path.join(__dirname, '..', 'packs'), dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'keystone-key-')) });
+  c.listProcesses = () => [];
+  c.attach({ packId: 'ark-survival-ascended' });
+  assert.equal(c.commands.settings().consoleKey, 'Backquote');
+  // Saved by an older Keystone, back when Tab was everyone's default.
+  c.store.update(c.game.key, (d) => { d.commands = { ...(d.commands || {}), consoleKey: 'Tab' }; });
+  assert.equal(c.commands.settings().consoleKey, 'Backquote');
+  // Picked by hand now: kept.
+  c.commands.setSettings({ consoleKey: 'Tab' });
+  assert.equal(c.commands.settings().consoleKey, 'Tab');
+  c.shutdown();
+});

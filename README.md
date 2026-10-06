@@ -102,6 +102,7 @@ Where the value lives decides how long the mod lasts. Values inside the game's o
 
 Each game's knowledge in one place. Open **Library** in the sidebar.
 
+- **Database pages** for each section (creatures, items, cars, codes...): a search box, a row of category chips with counts (pick one or several), and every entry as a picture card, grouped under colored category headings. Cards show the entry's map or code as tags. ARK's creatures switch between **Renders** and **Dossiers**. Long lists show 240 at a time with **Show more**.
 - **Browse** creature and item pages: category, map, the IDs admin commands need (with Copy buttons), and buttons that jump straight to Commands with that creature or item picked.
 - **Guides** written for the game, plus your own: drop Markdown (`.md`) files in your guides folder (**Library → All guides → Open my guides folder**) and they show up next to the pack's guides.
 - **My notes** on any creature or item, saved per game.
@@ -124,7 +125,7 @@ Pick what you want, set the details, and Keystone runs the admin command for you
 
 1. Open the game switcher and pick **ARK: Survival Ascended** under **Your games**. It works whether or not the game is running.
 2. Open **Commands** in the sidebar, then **Settings**:
-   - **Game console**: the key that opens ASA's console (Tab by default), the prefix (`admincheat` on servers), and your server's admin password.
+   - **Game console**: the key that opens ASA's console (the ` ~ key left of 1 by default; Tab in ASA recalls your last command instead), the prefix (`admincheat` on servers), and your server's admin password.
    - **RCON**: your server's address, RCON port and admin password, then **Test connection**. The server needs `RCONEnabled=True` and an `RCONPort` in its settings (most hosts have these in their control panel).
 3. In game, press **Log in as admin** once per session. Keystone types `EnableCheats` for you.
 4. Pick a tab:
@@ -346,6 +347,12 @@ scripts/capture.js   dev helper: launch, run a snippet, save a screenshot
 ```
 
 ## Changelog
+
+### 0.35.1
+- Fixed: ARK: Survival Ascended commands (and Find me) went into the game chat, or got the last command stuck in front of them. ASA opens its console with the ` ~ key, not Tab; Tab recalls the previous command once the console is open. The ASA pack now uses ` ~, and a Tab saved by an older Keystone gives way to it (a key you pick in Command settings from now on is kept).
+
+### 0.35.0
+- **Library redesign**: section pages (creatures, items, weapons, cars, codes...) are now database pages: game name and counts up top, a search box, category chips with counts and checkboxes, and the entries as picture cards grouped by category with colored headings and tag pills. ARK's creatures switch between renders and dossier drawings. Pictures load at a sharper card size (240 px), and black line-art icons (most of ARK's creature pictures) are shown as white lines so they stand out on the dark cards.
 
 ### 0.34.1
 - Fixed: **Find me** (and pasting commands) failed with "Error processing argument at index 0, conversion failure from". The Electron version Keystone runs on now reads the clipboard asynchronously, so Keystone was trying to put back a pending read instead of your clipboard text. Clipboard reads are awaited now, in both places.

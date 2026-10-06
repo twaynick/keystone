@@ -65,9 +65,9 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'ksmap', privileges: { standard: true, secure: true, supportFetchAPI: true } },
   // ksart://cover/<pack id> and ksart://hero/<pack id>: game art (see art.js).
   { scheme: 'ksart', privileges: { standard: true, secure: true, supportFetchAPI: true } },
-  // kslib://thumb|hero/<catalog>/<entry id>, kslib://spawn|spawnmap/<map #>/<catalog>/<entry id>:
+  // kslib://thumb|hero|card|carddossier/<catalog>/<entry id>, kslib://spawn|spawnmap/<map #>/<catalog>/<entry id>:
   // Library pictures from the game's wiki (see library-images.js).
-  { scheme: 'kslib', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  { scheme: 'kslib', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
 ]);
 let mainWindow = null;
 
@@ -320,13 +320,15 @@ function createController() {
       const u = new URL(req.url);
       const [a, b, c] = u.pathname.replace(/^\//, '').split('/').map(decodeURIComponent);
       const kind = u.hostname;
-      const file = kind === 'thumb' || kind === 'hero' ? await controller.library.pictureFile(kind, a, b)
+      const file = ['thumb', 'hero', 'card', 'carddossier'].includes(kind) ? await controller.library.pictureFile(kind, a, b)
         : kind === 'spawn' ? await controller.library.spawnFile('overlay', Number(a), b, c)
           : kind === 'spawnmap' ? await controller.library.spawnFile('map', Number(a), b, c)
             : null;
       if (!file) return new Response('No picture', { status: 404 });
       const buf = await fs.promises.readFile(file);
-      return new Response(buf, { headers: { 'content-type': mimeOf(buf), 'cache-control': 'max-age=86400' } });
+      // CORS so the Library can look at a picture's pixels (dark line-art
+      // icons get lightened on the dark cards); they're public wiki images.
+      return new Response(buf, { headers: { 'content-type': mimeOf(buf), 'cache-control': 'max-age=86400', 'access-control-allow-origin': '*' } });
     } catch {
       return new Response('No picture', { status: 404 });
     }

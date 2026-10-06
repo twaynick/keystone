@@ -33,7 +33,7 @@ const GW_OWNER = 4;
 // input.
 const KEYS = {
   Tab: { scan: 0x0f, label: 'Tab' },
-  Backquote: { scan: 0x29, label: '` (backquote)' },
+  Backquote: { scan: 0x29, label: '` ~ (left of 1)' },
   Insert: { scan: 0x52, extended: true, label: 'Insert' },
   Enter: { scan: 0x1c },
   Escape: { scan: 0x01 },

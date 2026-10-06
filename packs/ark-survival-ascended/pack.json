@@ -290,7 +290,7 @@
   "commands": {
     "credits": "Creature and item IDs from the ARK Wiki (ark.wiki.gg), community-maintained.",
     "console": {
-      "key": "Tab",
+      "key": "Backquote",
       "prefixes": [
         "admincheat",
         "cheat",
