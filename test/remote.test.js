@@ -281,7 +281,7 @@ test('phone map picture: needs the token in a header, and comes back as the imag
 
   // A game with no picture: 404, not a crash.
   controller.listProcesses = () => [];
-  controller.attach({ packId: 'phasmophobia' });
+  controller.attach({ packId: 'fallout-shelter' });
   assert.equal((await getWithToken(port, '/api/map-image', token)).status, 404);
   assert.equal(controller.snapshot().map, null, 'no map, no Map tab');
 

@@ -6,6 +6,13 @@
   "art": {
     "steamAppId": 552520
   },
+  "maps": [
+    {
+      "id": "hope-county",
+      "name": "Hope County",
+      "picture": "Hope County.jpg"
+    }
+  ],
   "offlineOnly": true,
   "offlineNote": "Far Cry 5 has online co-op and Arcade. Use mods only in single-player, offline, never in co-op or Arcade. Ubisoft can ban accounts for cheating in online play.",
   "info": [

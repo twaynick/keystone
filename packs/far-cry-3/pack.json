@@ -7,6 +7,13 @@
   "art": {
     "steamAppId": 220240
   },
+  "maps": [
+    {
+      "id": "rook-islands",
+      "name": "Rook Islands",
+      "picture": "FC3 Worldmap Level 1.png"
+    }
+  ],
   "offlineOnly": true,
   "offlineNote": "Far Cry 3 has a separate multiplayer mode. Use mods only in the single-player campaign, offline. Ubisoft can ban accounts for cheating in online play.",
   "info": [

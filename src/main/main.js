@@ -334,12 +334,14 @@ function createController() {
     }
   });
 
-  protocol.handle('ksmap', () => {
+  protocol.handle('ksmap', async () => {
     // Needs only a selected game, not mods: ASA on a BattlEye server has a
     // map and waypoints but no memory session.
     const m = controller.game ? controller.overlay.map() : null;
     if (!m?.image) return new Response('No map', { status: 404 });
-    return net.fetch(pathToFileURL(m.image).toString());
+    // Downloaded wiki pictures have no extension, so say what they are.
+    const buf = await fs.promises.readFile(m.image);
+    return new Response(buf, { headers: { 'content-type': mimeOf(buf) } });
   });
 }
 

@@ -6,6 +6,13 @@
   "art": {
     "steamAppId": 1293830
   },
+  "maps": [
+    {
+      "id": "britain",
+      "name": "Britain",
+      "picture": "FH4 Summer Map.jpg"
+    }
+  ],
   "offlineOnly": true,
   "offlineNote": "Forza Horizon 4 saves your progress to your Xbox profile and syncs it whenever you're online, so anything a mod changes (credits, cars, XP, Wheelspins) goes with you into online play, including if you modded in Solo or offline. Playground Games bans accounts it finds cheating. Use mods only playing offline, and only on progress you're prepared to lose.",
   "info": [

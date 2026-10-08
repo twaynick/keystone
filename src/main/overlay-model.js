@@ -5,6 +5,18 @@ const path = require('path');
 const crypto = require('crypto');
 const MapMath = require('../shared/map-math');
 const Crosshair = require('../shared/crosshair');
+const { SIZES, mimeOf } = require('./library-images');
+
+function readHead(file) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const b = Buffer.alloc(16);
+    fs.readSync(fd, b, 0, 16, 0);
+    return b;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
 
 // Overlay data for the attached game: where the player is, the map, waypoints,
 // live readouts and info cards. Pure Node so it can be tested without
@@ -165,10 +177,37 @@ class OverlayModel {
   // { image (path or null), bounds, custom } or null. A lat/lon map has
   // bounds without an image, so the minimap can draw a grid, markers and
   // your position before you add a picture.
+  // The pack's wiki picture for a map, if it's downloaded; starts the
+  // download (once) if not, and redraws when it arrives.
+  _picture(v) {
+    const imgs = this.c.library?.images;
+    const spec = this.pack?.library?.images;
+    if (!v.picture || !imgs || !spec) return null;
+    const name = spec.api ? `File:${v.picture}` : v.picture;
+    const have = imgs.cached(spec, name, SIZES.worldMap);
+    if (have) return have;
+    this._fetching = this._fetching || new Set();
+    const key = `${this.pack.id}:${v.id}`;
+    if (!this._fetching.has(key)) {
+      this._fetching.add(key);
+      imgs.file(spec, name, SIZES.worldMap)
+        .then((file) => { if (file) this.c.emit('overlay'); else this._fetching.delete(key); })
+        .catch(() => this._fetching.delete(key));
+    }
+    return null;
+  }
+
+  pictureCredit() {
+    const v = this.variant();
+    const spec = this.pack?.library?.images;
+    if (!v.picture || !spec?.credit) return null;
+    return String(spec.credit).replace(/^Pictures( and spawn maps)? from/i, 'Map picture from');
+  }
+
   map() {
     const v = this.variant();
     const c = this._custom(v.id);
-    const image = [c?.image, v.image].find((p) => p && fs.existsSync(p)) || null;
+    const image = [c?.image, v.image, this._picture(v)].find((p) => p && fs.existsSync(p)) || null;
     const custom = Boolean(c?.image && image === c.image);
     // A custom image has its own edges (none until it's lined up): the
     // pack's edges describe the pack's picture, not the player's screenshot.
@@ -687,8 +726,10 @@ class OverlayModel {
   phoneMapImage() {
     const image = this.game ? this.map()?.image : null;
     if (!image) return null;
-    const type = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[path.extname(image).toLowerCase()];
-    return type ? { file: image, type } : null;
+    // Downloaded wiki pictures are stored without an extension: sniff them.
+    const type = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[path.extname(image).toLowerCase()]
+      || mimeOf(readHead(image));
+    return /^image\/(png|jpeg|webp)$/.test(type) ? { file: image, type } : null;
   }
 
   // ---------- what the overlay renders ----------
@@ -715,7 +756,7 @@ class OverlayModel {
       variants: this.variants().map((v) => ({ id: v.id, name: v.name })),
       variant: { id: this.variant().id, name: this.variant().name, units: this.variant().units },
       layers: this.layers(),
-      markerCredits: this.variant().markers.credits,
+      markerCredits: [this.variant().markers.credits, map && !map.custom ? this.pictureCredit() : null].filter(Boolean).join(' · ') || null,
       here: this.here(),
       findMe: Boolean(this.pack?.findMe && this.coords()),
       findMeFixed: Boolean(this._data().coordFix?.[this.variant().id]),

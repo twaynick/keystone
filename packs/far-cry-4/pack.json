@@ -6,6 +6,13 @@
   "art": {
     "steamAppId": 298110
   },
+  "maps": [
+    {
+      "id": "kyrat",
+      "name": "Kyrat",
+      "picture": "FC4 Kyrat Terrain map.jpg"
+    }
+  ],
   "offlineOnly": true,
   "offlineNote": "Far Cry 4 has online co-op. Use mods only in single-player, offline, never with a co-op partner. Ubisoft can ban accounts for cheating in online play.",
   "info": [

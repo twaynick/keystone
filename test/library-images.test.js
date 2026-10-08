@@ -124,7 +124,7 @@ test('ARK Library: sections and entries say what pictures they have; files come 
   const rex = c.library.entries('creatures').find((e) => e.name === 'Rex');
   assert.equal(c.library.entry('creatures', rex.id).pictures.hero, true);
   assert.ok(await c.library.pictureFile('hero', 'creatures', rex.id));
-  assert.match(wiki.calls[0].url, /^https:\/\/ark\.wiki\.gg\/wiki\/Special:FilePath\/Dossier_Rex\.png/);
+  assert.ok(wiki.calls.some((x) => /^https:\/\/ark\.wiki\.gg\/wiki\/Special:FilePath\/Dossier_Rex\.png/.test(x.url)));
   await assert.rejects(c.library.pictureFile('hero', 'creatures', '../../etc/passwd'), /isn.t in the list/);
   assert.equal(await c.library.pictureFile('evil', 'creatures', rex.id), null);
   // The Library grid's card sizes: dossiers for creatures, nothing to switch for items.

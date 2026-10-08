@@ -28,7 +28,7 @@ const path = require('path');
 //     "teleport": { "lift": 200, "holdMs": 300 }            // tuning for memory teleports
 //              or { "command": ["SetPlayerPos {x} {y} {z}"], "via": "console" },
 //     "markers": "markers.json",          // marker layers for "map" (see markersOf)
-//     "maps": [ { "id": "the-island", "name": "The Island", "units": "latlon",
+//     "maps": [ { "id": "the-island", "name": "The Island", "units": "latlon", "picture": "Island_Map.jpg",
 //                 "bounds": { "left": 0, "right": 100, "top": 0, "bottom": 100 },
 //                 "coords": { "lat": { "shift": 50, "div": 6850 }, "lon": { "shift": 50, "div": 6850 } },
 //                 "markers": "markers/the-island.json", "image": "optional.png" } ],
@@ -140,12 +140,18 @@ function mapsOf(raw, folder) {
     const id = String(m?.id || '').trim();
     if (!id || seen.has(id) || !/^[a-z0-9._-]{1,40}$/i.test(id)) continue;
     seen.add(id);
+    // "picture": a file on the game's wiki (the Library's picture source),
+    // downloaded by the player's PC the first time the map opens. A picture
+    // without game coordinates gets 0–100 edges, so "I'm here" and
+    // waypoints work on it straight away; lining it up replaces them.
+    const picture = typeof m.picture === 'string' && /^[^/\\?#|]{1,200}\.(png|jpe?g|webp)$/i.test(m.picture) ? m.picture : null;
     out.push({
       id,
       name: String(m.name || id),
       units: m.units === 'latlon' ? 'latlon' : 'xy',
       image: rel(m.image),
-      bounds: m.bounds || null,
+      picture,
+      bounds: m.bounds || (picture ? { left: 0, right: 100, top: 0, bottom: 100 } : null),
       coords: coordsOf(m.coords),
       markers: markersOf(m.markers, folder, m.units === 'latlon'),
     });

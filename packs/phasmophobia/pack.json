@@ -6,6 +6,58 @@
   "art": {
     "steamAppId": 739630
   },
+  "maps": [
+    {
+      "id": "6-tanglewood-drive",
+      "name": "6 Tanglewood Drive",
+      "picture": "6 Tanglewood Drive - Floorplan.png"
+    },
+    {
+      "id": "42-edgefield-road",
+      "name": "42 Edgefield Road",
+      "picture": "42 Edgefield Road - Floorplan.png"
+    },
+    {
+      "id": "10-ridgeview-court",
+      "name": "10 Ridgeview Court",
+      "picture": "10 Ridgeview Court - Floorplan.png"
+    },
+    {
+      "id": "13-willow-street",
+      "name": "13 Willow Street",
+      "picture": "13 Willow Street - Floorplan.png"
+    },
+    {
+      "id": "grafton-farmhouse",
+      "name": "Grafton Farmhouse",
+      "picture": "Grafton Farmhouse - Floorplan.png"
+    },
+    {
+      "id": "bleasdale-farmhouse",
+      "name": "Bleasdale Farmhouse",
+      "picture": "Bleasdale Farmhouse - Floorplan.png"
+    },
+    {
+      "id": "maple-lodge-campsite",
+      "name": "Maple Lodge Campsite",
+      "picture": "Maple Lodge Campsite - Floorplan.png"
+    },
+    {
+      "id": "prison",
+      "name": "Prison",
+      "picture": "Prison - Floorplan.png"
+    },
+    {
+      "id": "brownstone-high-school",
+      "name": "Brownstone High School",
+      "picture": "Brownstone High School - Floorplan.png"
+    },
+    {
+      "id": "sunny-meadows",
+      "name": "Sunny Meadows",
+      "picture": "Sunny Meadows Mental Institution - Full Map Floorplan.png"
+    }
+  ],
   "offlineOnly": true,
   "offlineNote": "Single-player only. Use mods only in a solo, offline game: in multiplayer they spoil the contract for everyone else and can get your account banned. The ghost identifier, Library, timers and overlay never touch the game and are fine anywhere.",
   "info": [

@@ -6,6 +6,18 @@
   "art": {
     "steamAppId": 377160
   },
+  "maps": [
+    {
+      "id": "commonwealth",
+      "name": "The Commonwealth",
+      "picture": "FO4 Worldmap.png"
+    },
+    {
+      "id": "far-harbor",
+      "name": "Far Harbor",
+      "picture": "Map Far Harbor.png"
+    }
+  ],
   "info": [
     {
       "title": "Commands",

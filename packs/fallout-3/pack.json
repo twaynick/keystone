@@ -6,6 +6,13 @@
   "art": {
     "steamAppId": 22370
   },
+  "maps": [
+    {
+      "id": "capital-wasteland",
+      "name": "Capital Wasteland",
+      "picture": "Capital Wasteland map.jpg"
+    }
+  ],
   "info": [
     {
       "title": "Commands",

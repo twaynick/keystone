@@ -348,6 +348,11 @@ scripts/capture.js   dev helper: launch, run a snippet, save a screenshot
 
 ## Changelog
 
+### 0.36.0
+- **Map pictures for every game with a world map**, downloaded from each game's wiki the first time the map opens (nothing is bundled): ARK's seven topographic maps (lined up with its lat/lon, so caves and Find me land in the right spots), Fallout 3's Capital Wasteland, New Vegas's Mojave, Fallout 4's Commonwealth and Far Harbor, Far Cry 3's Rook Islands, Far Cry 4's Kyrat, Far Cry 5's Hope County, Far Cry 6's Yara, New Dawn's Hope County, Forza Horizon 4's Britain, 5's Mexico and 6's Japan, and floor plans for ten Phasmophobia maps. The wiki is credited under the map.
+- Maps without game coordinates get 0–100 edges, so "I'm here" and waypoints work on them right away; **Line up the map** still fits them to real coordinates when you have position mods.
+- No picture on the wikis yet for Far Cry Primal, Nell's Diner, Point Hope or Camp Woodwind; Choose map image works there as before.
+
 ### 0.35.1
 - Fixed: ARK: Survival Ascended commands (and Find me) went into the game chat, or got the last command stuck in front of them. ASA opens its console with the ` ~ key, not Tab; Tab recalls the previous command once the console is open. The ASA pack now uses ` ~, and a Tab saved by an older Keystone gives way to it (a key you pick in Command settings from now on is kept).
 

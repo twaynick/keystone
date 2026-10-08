@@ -35,7 +35,7 @@ const crypto = require('crypto');
 // The renderer only ever names an entry, never a URL or a file name, so a
 // compromised page can't make Keystone fetch anything the pack didn't list.
 
-const SIZES = { thumb: 96, card: 240, hero: 720, map: 640 };
+const SIZES = { thumb: 96, card: 240, hero: 720, map: 640, worldMap: 2048 };
 const MAX_BYTES = 6 * 1024 * 1024;
 // A picture the wiki doesn't have is asked for again after this long, in
 // case someone uploads it.
@@ -120,10 +120,21 @@ class LibraryImages {
     return null;
   }
 
-  async file(spec, name, size) {
+  _path(spec, name, size) {
     const key = crypto.createHash('sha1').update(spec.api || spec.source).digest('hex').slice(0, 10);
     const safe = `${name.replace(/[^A-Za-z0-9._-]/g, '_')}-${crypto.createHash('sha1').update(name).digest('hex').slice(0, 6)}`;
-    const file = path.join(this.dir, key, String(size || 'full'), safe);
+    return path.join(this.dir, key, String(size || 'full'), safe);
+  }
+
+  // The local copy if it's been downloaded already, else null (no fetching).
+  cached(spec, name, size) {
+    if (!LibraryImages.valid(spec)) return null;
+    const file = this._path(spec, name, size);
+    return fs.existsSync(file) ? file : null;
+  }
+
+  async file(spec, name, size) {
+    const file = this._path(spec, name, size);
     if (fs.existsSync(file)) return file;
     const miss = `${file}.missing`;
     if (fs.existsSync(miss)) {

@@ -6,6 +6,13 @@
   "art": {
     "steamAppId": 22380
   },
+  "maps": [
+    {
+      "id": "mojave",
+      "name": "Mojave Wasteland",
+      "picture": "Mojave Wasteland map.jpg"
+    }
+  ],
   "info": [
     {
       "title": "Commands",

@@ -192,3 +192,35 @@ test('Find me works with an async clipboard (Electron 44) and puts the old text 
   assert.ok(Number.isFinite(h.x) && Number.isFinite(h.y));
   assert.equal(clip(), 'my own clipboard text');
 });
+
+test('pack maps with a wiki picture: downloaded once, then used; 0–100 edges when the game gives none', async () => {
+  const { LibraryImages } = require('../src/main/library-images');
+  const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a6f80000000049454e44ae426082', 'hex');
+  const dataDir = tmpDir();
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    if (url.includes('api.php')) return new Response(JSON.stringify({ query: { pages: { 1: { imageinfo: [{ thumburl: 'https://static.example/hope.png' }] } } } }), { status: 200 });
+    return new Response(PNG, { status: 200, headers: { 'content-type': 'image/png' } });
+  };
+  const c = new Controller({ packsDir: PACKS, dataDir });
+  c.library.images = new LibraryImages({ dataDir, fetchImpl });
+  c.listProcesses = () => [];
+  let redraws = 0;
+  c.on('overlay', () => { redraws++; });
+  c.attach({ packId: 'far-cry-5' });
+  const v = c.overlay.variant();
+  assert.equal(v.picture, 'Hope County.jpg');
+  assert.deepEqual(c.overlay.map().bounds, { left: 0, right: 100, top: 0, bottom: 100 });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.ok(redraws > 1, 'redrawn once the picture arrived');
+  const m = c.overlay.map();
+  assert.ok(m.image && fs.existsSync(m.image));
+  assert.equal(c.overlay.phoneMapImage().type, 'image/png', 'sniffed: the file has no extension');
+  assert.match(calls[0], /titles=File%3AHope\+County\.jpg/);
+  assert.match(c.overlay.state().markerCredits || '', /^Map picture from/i);
+  const before = calls.length;
+  c.overlay.map();
+  assert.equal(calls.length, before, 'not fetched again');
+  c.shutdown();
+});

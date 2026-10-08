@@ -14,6 +14,7 @@
     {
       "id": "the-island",
       "name": "The Island",
+      "picture": "The_Island_Topographic_Map.jpg",
       "units": "latlon",
       "bounds": {
         "left": 0,
@@ -36,6 +37,7 @@
     {
       "id": "scorched-earth",
       "name": "Scorched Earth",
+      "picture": "Scorched_Earth_Topographic_Map.jpg",
       "units": "latlon",
       "bounds": {
         "left": 0,
@@ -57,6 +59,7 @@
     {
       "id": "the-center",
       "name": "The Center",
+      "picture": "The_Center_Topographic_Map.jpg",
       "units": "latlon",
       "bounds": {
         "left": 0,
@@ -78,6 +81,7 @@
     {
       "id": "aberration",
       "name": "Aberration",
+      "picture": "Aberration_Topographic_Map.jpg",
       "units": "latlon",
       "bounds": {
         "left": 0,
@@ -99,6 +103,7 @@
     {
       "id": "extinction",
       "name": "Extinction",
+      "picture": "Extinction_Topographic_Map.jpg",
       "units": "latlon",
       "bounds": {
         "left": 0,
@@ -120,6 +125,7 @@
     {
       "id": "ragnarok",
       "name": "Ragnarok",
+      "picture": "Ragnarok_Ocean_Topographic_Map.jpg",
       "units": "latlon",
       "bounds": {
         "left": 0,
@@ -141,6 +147,7 @@
     {
       "id": "valguero",
       "name": "Valguero",
+      "picture": "Valguero_Topographic_Map.jpg",
       "units": "latlon",
       "bounds": {
         "left": 0,
