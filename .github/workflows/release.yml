@@ -117,11 +117,17 @@ jobs:
             if ($sig.Status -ne 'Valid') { Write-Error "$($f.Name) isn't validly signed: $($sig.StatusMessage)"; exit 1 }
           }
 
+      # Only on a manual run, and only for three days. A tagged build already
+      # puts the installer on the Releases page, so a second copy here was
+      # the same file stored twice, for GitHub's default 90 days, on every
+      # release. Artifacts count against the account's Actions storage.
       - name: Keep the installer as a build artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
           name: keystone-installer
           path: dist/*.exe
+          retention-days: 3
 
       - name: Attach to a GitHub release
         if: startsWith(github.ref, 'refs/tags/')
